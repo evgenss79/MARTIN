@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from src.domain.models import Stats, Trade, Signal
 from src.domain.enums import TimeMode, PolicyMode, Decision, FillStatus
-from src.adapters.storage import StatsRepository, TradeRepository
+from src.adapters.storage import StatsRepository, TradeRepository, SignalRepository
 from src.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -113,6 +113,7 @@ class StatsService:
         """
         self._stats_repo = stats_repo
         self._trade_repo = trade_repo
+        self._signal_repo: SignalRepository | None = None  # Lazy init
         self._switch_streak_at = switch_streak_at
         self._night_max_win_streak = night_max_win_streak
         self._night_resets_trade = night_session_resets_trade_streak
@@ -124,6 +125,13 @@ class StatsService:
         self._fallback_mult = strict_fallback_mult
         self._base_day_q = base_day_min_quality
         self._base_night_q = base_night_min_quality
+    
+    def _get_signal_repo(self) -> SignalRepository:
+        """Get or create signal repository (lazy initialization)."""
+        if self._signal_repo is None:
+            from src.adapters.storage import get_database
+            self._signal_repo = SignalRepository(get_database())
+        return self._signal_repo
     
     def get_stats(self) -> Stats:
         """Get current stats."""
@@ -309,21 +317,8 @@ class StatsService:
         Returns:
             Calculated threshold
         """
-        # Get quality values from trades
-        # Need to get signal quality for each trade
-        qualities: list[float] = []
-        
-        for trade in trades:
-            # Trade should have associated signal with quality
-            if trade.signal_id:
-                from src.adapters.storage import SignalRepository, get_database
-                try:
-                    signal_repo = SignalRepository(get_database())
-                    signal = signal_repo.get_by_id(trade.signal_id)
-                    if signal and signal.quality:
-                        qualities.append(signal.quality)
-                except Exception:
-                    pass
+        # Get quality values from trades using centralized signal repository
+        qualities = self._get_qualities_for_trades(trades)
         
         if len(qualities) < self._min_samples:
             # Fallback: use base * multiplier or last stored value
@@ -337,6 +332,33 @@ class StatsService:
             return fallback
         
         return compute_quantile(qualities, quantile)
+    
+    def _get_qualities_for_trades(self, trades: list[Trade]) -> list[float]:
+        """
+        Extract quality values from trades via their associated signals.
+        
+        This method centralizes the signal repository access for better
+        separation of concerns and testability.
+        
+        Args:
+            trades: List of trades
+            
+        Returns:
+            List of quality values
+        """
+        qualities: list[float] = []
+        signal_repo = self._get_signal_repo()
+        
+        for trade in trades:
+            if trade.signal_id:
+                try:
+                    signal = signal_repo.get_by_id(trade.signal_id)
+                    if signal and signal.quality:
+                        qualities.append(signal.quality)
+                except Exception:
+                    pass
+        
+        return qualities
     
     def get_current_threshold(self, time_mode: TimeMode, policy_mode: PolicyMode) -> float:
         """

@@ -302,22 +302,23 @@ class Orchestrator:
         )
         trade = self._trade_repo.create(trade)
         
-        # Fetch candles
+        # Fetch candles concurrently for better performance
         try:
-            candles_1m = await self._binance.get_klines_for_window(
-                asset=window.asset,
-                interval="1m",
-                start_ts=window.start_ts,
-                end_ts=window.end_ts,
-                warmup_seconds=self._warmup_seconds,
-            )
-            
-            candles_5m = await self._binance.get_klines_for_window(
-                asset=window.asset,
-                interval="5m",
-                start_ts=window.start_ts,
-                end_ts=window.end_ts,
-                warmup_seconds=self._warmup_seconds,
+            candles_1m, candles_5m = await asyncio.gather(
+                self._binance.get_klines_for_window(
+                    asset=window.asset,
+                    interval="1m",
+                    start_ts=window.start_ts,
+                    end_ts=window.end_ts,
+                    warmup_seconds=self._warmup_seconds,
+                ),
+                self._binance.get_klines_for_window(
+                    asset=window.asset,
+                    interval="5m",
+                    start_ts=window.start_ts,
+                    end_ts=window.end_ts,
+                    warmup_seconds=self._warmup_seconds,
+                ),
             )
         except Exception as e:
             logger.error("Error fetching candles", error=str(e), window_id=window.id)
