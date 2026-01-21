@@ -431,6 +431,69 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Production-Like QA Expansion
+
+**Change**: Added comprehensive production-like QA tests (smoke, scheduler, E2E integration).
+
+**Details**:
+- Created `src/tests/test_smoke.py`:
+  - Bootstrap and config validation tests
+  - DB initialization and migrations tests
+  - Stats singleton verification
+  - Module import tests
+- Created `src/tests/test_scheduler.py`:
+  - Scheduler instantiation tests
+  - Job registration tests
+  - Job invocation with mocked APIs
+- Created `src/tests/test_e2e_day_flow.py`:
+  - Complete day flow: discovery → signal → OK → CAP_PASS → execute → WIN
+  - Quality fail scenario
+  - User SKIP scenario
+  - Mocked Gamma/Binance/CLOB APIs
+- Created `src/tests/test_e2e_night_flow.py`:
+  - SOFT_RESET behavior verification
+  - HARD_RESET behavior verification
+  - OFF mode verification
+  - Loss reset behavior
+- Created `src/tests/test_e2e_edge_cases.py`:
+  - LATE confirm (confirm_ts >= end_ts) - MG-3
+  - CAP_FAIL (never reaches min_ticks) - MG-2
+  - Ticks before confirm_ts ignored - MG-2
+  - Auth gating (live mode without master key)
+  - Logout clears authorization
+- Created `QA_REPORT.md`:
+  - Test commands
+  - Smoke tests summary
+  - Scheduler wiring summary
+  - E2E scenarios covered
+  - Memory Gate compliance matrix
+  - Security verification
+  - Known limitations
+
+**Test Count**: 157 total
+- 137 original unit tests
+- 4 smoke tests
+- 4 scheduler tests
+- 6 E2E day flow tests
+- 6 E2E night flow tests
+
+**Files Created**:
+- `src/tests/test_smoke.py`
+- `src/tests/test_scheduler.py`
+- `src/tests/test_e2e_day_flow.py`
+- `src/tests/test_e2e_night_flow.py`
+- `src/tests/test_e2e_edge_cases.py`
+- `QA_REPORT.md`
+
+**Files Modified**:
+- `CHANGE_LOG.md`
+
+**Reason**: Production-like QA verification per user request - expand test coverage beyond unit tests.
+
+**Behavior Changed**: No (test additions only)
+
+---
+
 ## Template for Future Entries
 
 ```markdown
