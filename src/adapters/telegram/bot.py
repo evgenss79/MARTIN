@@ -2,6 +2,10 @@
 Telegram Bot Handler for MARTIN.
 
 Implements the Telegram UX for trading signals and user interaction.
+
+Status Indicators:
+- 🟢/🔴 Series Active/Inactive
+- 🟡/⚪ Polymarket Authorized/Not Authorized
 """
 
 import asyncio
@@ -16,6 +20,12 @@ from aiogram.enums import ParseMode
 from src.domain.models import Trade, Signal, MarketWindow, QualityBreakdown, Stats
 from src.domain.enums import TimeMode, PolicyMode, TradeStatus
 from src.common.logging import get_logger
+from src.services.status_indicator import (
+    compute_series_indicator,
+    compute_polymarket_auth_indicator,
+    SeriesIndicator,
+    PolymarketAuthIndicator,
+)
 
 if TYPE_CHECKING:
     from src.services.orchestrator import Orchestrator
@@ -89,8 +99,15 @@ class TelegramHandler:
             stats = self._orchestrator.get_stats()
             mode_text = self._get_mode_text(stats)
             
+            # Get status indicators
+            series_indicator = self._get_series_indicator(stats)
+            auth_indicator = self._get_polymarket_auth_indicator()
+            
             text = (
                 "📊 *MARTIN Status*\n\n"
+                f"*Indicators:*\n"
+                f"{series_indicator}\n"
+                f"{auth_indicator}\n\n"
                 f"Policy: {stats.policy_mode.value}\n"
                 f"Mode: {mode_text}\n"
                 f"Trade Streak: {stats.trade_level_streak}\n"
@@ -203,6 +220,62 @@ class TelegramHandler:
             return "🌙 Night Only"
         return "🔄 All Hours"
     
+    def _get_series_indicator(self, stats: Stats) -> SeriesIndicator:
+        """
+        Get series activity indicator.
+        
+        Returns:
+            SeriesIndicator with current status
+        """
+        import time
+        from src.services.time_mode import TimeModeService
+        from src.adapters.storage import get_database, TradeRepository
+        from src.common.config import get_config
+        
+        config = get_config()
+        time_svc = TimeModeService()
+        current_mode = time_svc.get_current_mode(int(time.time()))
+        night_autotrade = config.day_night.get("night_autotrade_enabled", False)
+        
+        # Get active trades
+        db = get_database()
+        trade_repo = TradeRepository(db)
+        active_trades = trade_repo.get_active()
+        
+        return compute_series_indicator(
+            stats=stats,
+            active_trades=active_trades,
+            current_time_mode=current_mode,
+            night_autotrade_enabled=night_autotrade,
+        )
+    
+    def _get_polymarket_auth_indicator(self) -> PolymarketAuthIndicator:
+        """
+        Get Polymarket authorization indicator.
+        
+        Returns:
+            PolymarketAuthIndicator with current status
+        """
+        from src.common.config import get_config
+        config = get_config()
+        execution_mode = config.execution.get("mode", "paper")
+        
+        return compute_polymarket_auth_indicator(execution_mode)
+    
+    def _format_indicators_header(self, stats: Stats) -> str:
+        """
+        Format status indicators as a header string.
+        
+        Args:
+            stats: Current stats
+            
+        Returns:
+            Formatted header with indicators
+        """
+        series = self._get_series_indicator(stats)
+        auth = self._get_polymarket_auth_indicator()
+        return f"{series} | {auth}"
+    
     async def start(self) -> None:
         """Start the Telegram bot."""
         logger.info("Starting Telegram bot polling")
@@ -242,12 +315,19 @@ class TelegramHandler:
         signal_local = time_svc.format_local_time(signal.signal_ts)
         confirm_local = time_svc.format_local_time(signal.confirm_ts)
         
-        # Build message
+        # Get status indicators for header
+        stats = self._orchestrator.get_stats()
+        series_indicator = self._get_series_indicator(stats)
+        auth_indicator = self._get_polymarket_auth_indicator()
+        
+        # Build message with indicators header
         direction_emoji = "📈" if signal.direction.value == "UP" else "📉"
         mode_emoji = "☀️" if trade.time_mode == TimeMode.DAY else "🌙"
         policy_emoji = "🔒" if trade.policy_mode == PolicyMode.STRICT else "📋"
         
         text = (
+            f"{series_indicator} | {auth_indicator}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"*{direction_emoji} {window.asset} {signal.direction.value}*\n\n"
             f"🕐 Window: {start_local} → {end_local}\n"
             f"📍 Signal: {signal_local}\n"

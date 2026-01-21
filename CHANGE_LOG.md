@@ -142,6 +142,50 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Add Telegram Status Indicators
+
+**Change**: Added two visual status indicators to Telegram UI.
+
+**Details**:
+- Created `src/services/status_indicator.py`:
+  - `SeriesIndicator`: 🟢 Series Active / 🔴 Series Inactive
+  - `PolymarketAuthIndicator`: 🟡 Authorized / ⚪ Not Authorized
+  - `compute_series_indicator()`: Deterministic series activity check
+  - `compute_polymarket_auth_indicator()`: Auth status check
+- Updated `src/adapters/telegram/bot.py`:
+  - Added indicators to `/status` command response
+  - Added indicators to trade card headers
+  - New helper methods: `_get_series_indicator()`, `_get_polymarket_auth_indicator()`
+
+**Series Active Definition** (strict and deterministic):
+- series_active = TRUE if:
+  a) trading is not paused, AND
+  b) there is at least one in-progress trade (WAITING_CONFIRM, WAITING_CAP, READY, ORDER_PLACED) OR trade_level_streak > 0, AND
+  c) bot is allowed to trade in current mode (day: always; night: night_autotrade_enabled)
+
+**Polymarket Auth Definition**:
+- Authorized (🟡) if:
+  - execution.mode == "live" AND
+  - POLYMARKET_PRIVATE_KEY exists OR (API_KEY + SECRET + PASSPHRASE exist)
+- Not Authorized (⚪) otherwise, with context:
+  - Paper Mode: "Polymarket Live Disabled (Paper Mode)"
+  - Missing creds: "Polymarket Not Authorized (Missing Credentials)"
+
+**Files Created**:
+- `src/services/status_indicator.py`
+
+**Files Modified**:
+- `src/adapters/telegram/bot.py`
+- `CHANGE_LOG.md`
+
+**Reason**: User request to add visual indicators showing series activity and Polymarket authorization status.
+
+**Behavior Changed**: Yes (UI only)
+- New status indicators shown in `/status` response
+- New status indicators shown in trade card headers
+
+---
+
 ## Template for Future Entries
 
 ```markdown
