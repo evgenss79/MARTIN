@@ -1,0 +1,81 @@
+{
+  "$schema": "./config.schema.json",
+  "app": {
+    "timezone": "Europe/Zurich",
+    "log_level": "INFO",
+    "log_format": "json"
+  },
+  "trading": {
+    "assets": ["BTC", "ETH"],
+    "window_seconds": 3600,
+    "price_cap": 0.55,
+    "confirm_delay_seconds": 120,
+    "cap_min_ticks": 3
+  },
+  "day_night": {
+    "day_start_hour": 8,
+    "day_end_hour": 22,
+    "base_day_min_quality": 50.0,
+    "base_night_min_quality": 60.0,
+    "switch_streak_at": 3,
+    "strict_day_q": "p95",
+    "strict_night_q": "p95",
+    "night_max_win_streak": 5,
+    "night_autotrade_enabled": false,
+    "night_session_resets_trade_streak": true
+  },
+  "ta": {
+    "warmup_seconds": 7200,
+    "adx_period": 14,
+    "ema50_slope_bars": 5,
+    "anchor_scale": 10000.0,
+    "w_anchor": 0.3,
+    "w_adx": 0.4,
+    "w_slope": 0.3,
+    "trend_bonus": 1.2,
+    "trend_penalty": 0.8
+  },
+  "apis": {
+    "gamma": {
+      "base_url": "https://gamma-api.polymarket.com",
+      "timeout": 30,
+      "retries": 3,
+      "backoff": 2.0
+    },
+    "clob": {
+      "base_url": "https://clob.polymarket.com",
+      "timeout": 30,
+      "retries": 3,
+      "backoff": 2.0
+    },
+    "binance": {
+      "base_url": "https://api.binance.com",
+      "timeout": 30,
+      "retries": 3,
+      "backoff": 2.0
+    }
+  },
+  "telegram": {
+    "admin_user_ids": [],
+    "message_rate_limit_per_minute": 20
+  },
+  "storage": {
+    "driver": "sqlite",
+    "dsn": "sqlite:///data/martin.db"
+  },
+  "risk": {
+    "stake": {
+      "mode": "fixed",
+      "base_amount_usdc": 10.0
+    }
+  },
+  "execution": {
+    "mode": "paper"
+  },
+  "rolling_quantile": {
+    "rolling_days": 14,
+    "max_samples": 500,
+    "min_samples": 50,
+    "strict_fallback_mult": 1.25
+  }
+}
