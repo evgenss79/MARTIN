@@ -86,6 +86,46 @@ DOWN signal: high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[
 
 ---
 
+### 4a. Day/Night Configuration Service (`services/day_night_config.py`)
+
+**Purpose**: Manage user-configurable day/night time ranges
+
+- Supports wrap-around midnight scenarios (e.g., 22:00 to 06:00)
+- Persists settings to SQLite settings table
+- All changes apply immediately without restart
+
+**Wrap-Around Logic**:
+```
+Normal:    day_start < day_end   → DAY if hour in [start, end)
+Wrap:      day_start >= day_end  → DAY if hour >= start OR hour < end
+```
+
+**Configurable Settings**:
+- `day_start_hour` (0-23)
+- `day_end_hour` (0-23)
+- `night_autotrade_enabled` (boolean)
+- `reminder_minutes_before_day_end` (0-180)
+
+---
+
+### 4b. Day End Reminder Service (`services/day_end_reminder.py`)
+
+**Purpose**: Send automatic reminders before day trading window ends
+
+- Configurable X minutes before day end
+- Rate-limited: max one reminder per calendar day
+- Timezone-aware (Europe/Zurich)
+- Shows night session mode options (OFF/SOFT/HARD)
+
+**Reminder Content**:
+- Current local time
+- Day window end time
+- Night session mode with explanation
+- Execution mode and auth status
+- Quick action buttons
+
+---
+
 ### 5. Execution Engine (`services/execution.py`)
 
 **Purpose**: Place orders
@@ -230,24 +270,28 @@ MARTIN/
     │       ├── database.py       # SQLite connection
     │       └── repositories.py   # Data access
     ├── services/
-    │   ├── ta_engine.py      # Technical analysis
-    │   ├── cap_check.py      # CAP_PASS validation
-    │   ├── state_machine.py  # Trade lifecycle
-    │   ├── time_mode.py      # Day/Night logic
-    │   ├── stats_service.py  # Streaks & quantiles
-    │   ├── execution.py      # Order execution
-    │   ├── secure_vault.py   # Encrypted credential storage
+    │   ├── ta_engine.py        # Technical analysis
+    │   ├── cap_check.py        # CAP_PASS validation
+    │   ├── state_machine.py    # Trade lifecycle
+    │   ├── time_mode.py        # Day/Night mode detection
+    │   ├── day_night_config.py # Day/Night configuration with persistence
+    │   ├── day_end_reminder.py # Automatic day end reminders
+    │   ├── stats_service.py    # Streaks & quantiles
+    │   ├── execution.py        # Order execution
+    │   ├── secure_vault.py     # Encrypted credential storage
     │   ├── status_indicator.py # Status indicators
-    │   └── orchestrator.py   # Main coordinator
+    │   └── orchestrator.py     # Main coordinator
     ├── jobs/
-    │   └── scheduler.py      # Scheduled tasks
+    │   └── scheduler.py        # Scheduled tasks
     └── tests/
-        ├── test_cap_pass.py       # CAP_PASS tests
-        ├── test_ta_engine.py      # TA engine tests
-        ├── test_state_machine.py  # State machine tests
+        ├── test_cap_pass.py         # CAP_PASS tests
+        ├── test_ta_engine.py        # TA engine tests
+        ├── test_state_machine.py    # State machine tests
         ├── test_status_indicator.py # Status indicator tests
-        ├── test_crypto.py         # Encryption tests
-        └── test_secure_vault.py   # Vault tests
+        ├── test_crypto.py           # Encryption tests
+        ├── test_secure_vault.py     # Vault tests
+        ├── test_day_night_config.py # Day/Night config tests
+        └── test_day_end_reminder.py # Reminder tests
 ```
 
 ---

@@ -103,20 +103,37 @@ class TelegramHandler:
             series_indicator = self._get_series_indicator(stats)
             auth_indicator = self._get_polymarket_auth_indicator()
             
+            # Get day/night config for display
+            dn_config = self._get_day_night_config_service()
+            day_start = dn_config.get_day_start_hour()
+            day_end = dn_config.get_day_end_hour()
+            current_mode = dn_config.get_current_mode()
+            current_time = dn_config.get_current_local_time()
+            reminder_mins = dn_config.get_reminder_minutes()
+            
+            mode_emoji = "☀️" if current_mode.value == "DAY" else "🌙"
+            
             text = (
                 "📊 *MARTIN Status*\n\n"
                 f"*Indicators:*\n"
                 f"{series_indicator}\n"
                 f"{auth_indicator}\n\n"
-                f"Policy: {stats.policy_mode.value}\n"
-                f"Mode: {mode_text}\n"
-                f"Trade Streak: {stats.trade_level_streak}\n"
-                f"Night Streak: {stats.night_streak}\n\n"
-                f"Total Trades: {stats.total_trades}\n"
-                f"Wins: {stats.total_wins}\n"
-                f"Losses: {stats.total_losses}\n"
-                f"Win Rate: {stats.win_rate:.1f}%\n\n"
-                f"Paused: {'Yes' if stats.is_paused else 'No'}\n"
+                f"*Time:*\n"
+                f"├ Local: {current_time.strftime('%H:%M %Z')}\n"
+                f"├ Mode: {mode_emoji} {current_mode.value}\n"
+                f"└ Day Hours: {day_start:02d}:00 → {day_end:02d}:00\n\n"
+                f"*Policy:* {stats.policy_mode.value}\n"
+                f"*Streaks:*\n"
+                f"├ Trade: {stats.trade_level_streak}\n"
+                f"└ Night: {stats.night_streak}\n\n"
+                f"*Stats:*\n"
+                f"├ Trades: {stats.total_trades}\n"
+                f"├ Wins: {stats.total_wins}\n"
+                f"├ Losses: {stats.total_losses}\n"
+                f"└ Win Rate: {stats.win_rate:.1f}%\n\n"
+                f"*Controls:*\n"
+                f"├ Paused: {'Yes' if stats.is_paused else 'No'}\n"
+                f"└ Reminder: {reminder_mins}min {'(Disabled)' if reminder_mins == 0 else ''}\n"
             )
             
             await message.answer(text, parse_mode=ParseMode.MARKDOWN)
@@ -187,6 +204,11 @@ class TelegramHandler:
             
             data = callback.data
             
+            if data == "noop":
+                # No-operation callback (for separator buttons)
+                await callback.answer()
+                return
+            
             if data.startswith("trade_ok_"):
                 trade_id = int(data.split("_")[2])
                 await self._handle_trade_confirm(callback, trade_id, True)
@@ -198,6 +220,13 @@ class TelegramHandler:
             elif data.startswith("trade_details_"):
                 trade_id = int(data.split("_")[2])
                 await self._handle_trade_details(callback, trade_id)
+            
+            elif data == "settings_menu":
+                await self._show_settings_menu(callback.message)
+            
+            elif data == "toggle_night_auto":
+                dn_config = self._get_day_night_config_service()
+                await self._toggle_night_auto(callback, dn_config)
             
             elif data.startswith("settings_"):
                 await self._handle_settings_callback(callback, data)
@@ -429,40 +458,83 @@ class TelegramHandler:
         
         await callback.message.answer(text, parse_mode=ParseMode.MARKDOWN)
     
-    async def _show_settings_menu(self, message: types.Message) -> None:
-        """Show settings menu."""
+    def _get_day_night_config_service(self):
+        """Get or create DayNightConfigService instance."""
+        from src.services.day_night_config import DayNightConfigService
+        from src.adapters.storage import get_database, SettingsRepository
         from src.common.config import get_config
+        
         config = get_config()
+        db = get_database()
+        settings_repo = SettingsRepository(db)
+        
+        return DayNightConfigService(
+            settings_repo=settings_repo,
+            default_day_start=config.day_night.get("day_start_hour", 8),
+            default_day_end=config.day_night.get("day_end_hour", 22),
+            default_base_day_quality=config.day_night.get("base_day_min_quality", 50.0),
+            default_base_night_quality=config.day_night.get("base_night_min_quality", 60.0),
+            default_night_autotrade=config.day_night.get("night_autotrade_enabled", False),
+            default_night_max_streak=config.day_night.get("night_max_win_streak", 5),
+            default_switch_streak_at=config.day_night.get("switch_streak_at", 3),
+            default_reminder_minutes=config.day_night.get("reminder_minutes_before_day_end", 30),
+        )
+    
+    async def _show_settings_menu(self, message: types.Message) -> None:
+        """Show settings menu with current values from persisted settings."""
+        from src.common.config import get_config
+        
+        config = get_config()
+        dn_config = self._get_day_night_config_service()
+        
+        # Get persisted values (fall back to config defaults)
+        day_start = dn_config.get_day_start_hour()
+        day_end = dn_config.get_day_end_hour()
+        base_day_q = dn_config.get_base_day_quality()
+        base_night_q = dn_config.get_base_night_quality()
+        night_auto = dn_config.get_night_autotrade_enabled()
+        night_max = dn_config.get_night_max_streak()
+        switch_at = dn_config.get_switch_streak_at()
+        reminder_mins = dn_config.get_reminder_minutes()
+        
+        # Current mode
+        current_mode = dn_config.get_current_mode()
+        mode_emoji = "☀️" if current_mode.value == "DAY" else "🌙"
         
         text = (
             "⚙️ *Settings*\n\n"
-            f"Price Cap: {config.trading.get('price_cap', 0.55)}\n"
-            f"Confirm Delay: {config.trading.get('confirm_delay_seconds', 120)}s\n"
-            f"CAP Min Ticks: {config.trading.get('cap_min_ticks', 3)}\n"
-            f"Day Start: {config.day_night.get('day_start_hour', 8)}:00\n"
-            f"Day End: {config.day_night.get('day_end_hour', 22)}:00\n"
-            f"Base Day Quality: {config.day_night.get('base_day_min_quality', 50)}\n"
-            f"Base Night Quality: {config.day_night.get('base_night_min_quality', 60)}\n"
-            f"Switch Streak At: {config.day_night.get('switch_streak_at', 3)}\n"
-            f"Night Max Streak: {config.day_night.get('night_max_win_streak', 5)}\n"
-            f"Night Auto-trade: {config.day_night.get('night_autotrade_enabled', False)}\n"
+            f"{mode_emoji} *Current Mode:* {current_mode.value}\n\n"
+            f"*Day/Night Hours:*\n"
+            f"├ Day Start: {day_start:02d}:00\n"
+            f"└ Day End: {day_end:02d}:00\n\n"
+            f"*Quality Thresholds:*\n"
+            f"├ Base Day: {base_day_q:.1f}\n"
+            f"└ Base Night: {base_night_q:.1f}\n\n"
+            f"*Night Settings:*\n"
+            f"├ Auto-trade: {'✅ Enabled' if night_auto else '❌ Disabled'}\n"
+            f"└ Max Streak: {night_max}\n\n"
+            f"*Streak Settings:*\n"
+            f"└ Switch to STRICT at: {switch_at} wins\n\n"
+            f"*Reminders:*\n"
+            f"└ Before day end: {reminder_mins} min {'(Disabled)' if reminder_mins == 0 else ''}\n\n"
+            f"*Trading:*\n"
+            f"├ Price Cap: {config.trading.get('price_cap', 0.55)}\n"
+            f"├ Confirm Delay: {config.trading.get('confirm_delay_seconds', 120)}s\n"
+            f"└ CAP Min Ticks: {config.trading.get('cap_min_ticks', 3)}\n"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="Price Cap", callback_data="settings_price_cap"),
-                InlineKeyboardButton(text="Confirm Delay", callback_data="settings_confirm_delay"),
+                InlineKeyboardButton(text="🕐 Day Hours", callback_data="settings_day_hours"),
+                InlineKeyboardButton(text="📊 Quality", callback_data="settings_quality"),
             ],
             [
-                InlineKeyboardButton(text="CAP Ticks", callback_data="settings_cap_ticks"),
-                InlineKeyboardButton(text="Day Hours", callback_data="settings_day_hours"),
+                InlineKeyboardButton(text="🌙 Night Auto", callback_data="settings_night_auto"),
+                InlineKeyboardButton(text="🔥 Streaks", callback_data="settings_streaks"),
             ],
             [
-                InlineKeyboardButton(text="Base Quality", callback_data="settings_base_quality"),
-                InlineKeyboardButton(text="Streaks", callback_data="settings_streaks"),
-            ],
-            [
-                InlineKeyboardButton(text="Night Auto", callback_data="settings_night_auto"),
+                InlineKeyboardButton(text="⏰ Reminder", callback_data="settings_reminder"),
+                InlineKeyboardButton(text="💰 Trading", callback_data="settings_trading"),
             ],
         ])
         
@@ -473,14 +545,230 @@ class TelegramHandler:
         callback: types.CallbackQuery,
         data: str,
     ) -> None:
-        """Handle settings callback."""
+        """Handle settings callback with actual edits."""
         setting_name = data.replace("settings_", "")
+        dn_config = self._get_day_night_config_service()
         
-        # For now, just show info about how to change settings
-        await callback.message.answer(
-            f"To change {setting_name}, update config/config.json or use environment variables.\n"
-            "Runtime settings persistence coming soon!",
+        if setting_name == "day_hours":
+            await self._show_day_hours_settings(callback, dn_config)
+        elif setting_name == "night_auto":
+            await self._toggle_night_auto(callback, dn_config)
+        elif setting_name == "quality":
+            await self._show_quality_settings(callback, dn_config)
+        elif setting_name == "streaks":
+            await self._show_streak_settings(callback, dn_config)
+        elif setting_name == "reminder":
+            await self._show_reminder_settings(callback, dn_config)
+        elif setting_name == "trading":
+            await self._show_trading_info(callback)
+        elif setting_name.startswith("set_day_start_"):
+            hour = int(setting_name.replace("set_day_start_", ""))
+            await self._set_day_start(callback, dn_config, hour)
+        elif setting_name.startswith("set_day_end_"):
+            hour = int(setting_name.replace("set_day_end_", ""))
+            await self._set_day_end(callback, dn_config, hour)
+        elif setting_name.startswith("set_reminder_"):
+            minutes = int(setting_name.replace("set_reminder_", ""))
+            await self._set_reminder_minutes(callback, dn_config, minutes)
+        elif setting_name == "toggle_night_auto":
+            await self._toggle_night_auto(callback, dn_config)
+        else:
+            await callback.message.answer(
+                f"Setting '{setting_name}' edit not yet implemented.\n"
+                "Use config/config.json for now.",
+            )
+    
+    async def _show_day_hours_settings(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Show day hours settings with edit buttons."""
+        day_start = dn_config.get_day_start_hour()
+        day_end = dn_config.get_day_end_hour()
+        
+        text = (
+            "🕐 *Day/Night Hours*\n\n"
+            f"Current Day Window: {day_start:02d}:00 → {day_end:02d}:00\n\n"
+            "Timezone: Europe/Zurich (fixed)\n\n"
+            "*Set Day Start Hour:*\n"
+            "Select the hour when DAY mode begins:\n"
         )
+        
+        # Create hour selection buttons for start (0-23)
+        start_buttons = []
+        for i in range(0, 24, 6):
+            row = []
+            for h in range(i, min(i + 6, 24)):
+                marker = "✓" if h == day_start else ""
+                row.append(InlineKeyboardButton(
+                    text=f"{h:02d}{marker}",
+                    callback_data=f"settings_set_day_start_{h}"
+                ))
+            start_buttons.append(row)
+        
+        # Add separator text
+        start_buttons.append([InlineKeyboardButton(text="─── Day End Hour ───", callback_data="noop")])
+        
+        # Create hour selection buttons for end
+        for i in range(0, 24, 6):
+            row = []
+            for h in range(i, min(i + 6, 24)):
+                marker = "✓" if h == day_end else ""
+                row.append(InlineKeyboardButton(
+                    text=f"{h:02d}{marker}",
+                    callback_data=f"settings_set_day_end_{h}"
+                ))
+            start_buttons.append(row)
+        
+        start_buttons.append([InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=start_buttons)
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    async def _set_day_start(self, callback: types.CallbackQuery, dn_config, hour: int) -> None:
+        """Set day start hour."""
+        success = dn_config.set_day_start_hour(hour)
+        if success:
+            await callback.answer(f"✅ Day start set to {hour:02d}:00")
+            await self._show_day_hours_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid hour", show_alert=True)
+    
+    async def _set_day_end(self, callback: types.CallbackQuery, dn_config, hour: int) -> None:
+        """Set day end hour."""
+        success = dn_config.set_day_end_hour(hour)
+        if success:
+            await callback.answer(f"✅ Day end set to {hour:02d}:00")
+            await self._show_day_hours_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid hour", show_alert=True)
+    
+    async def _toggle_night_auto(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Toggle night autotrade setting."""
+        current = dn_config.get_night_autotrade_enabled()
+        new_value = not current
+        dn_config.set_night_autotrade_enabled(new_value)
+        
+        status = "✅ Enabled" if new_value else "❌ Disabled"
+        await callback.answer(f"Night Auto-trade: {status}")
+        
+        # Refresh settings menu
+        await self._show_settings_menu(callback.message)
+    
+    async def _show_quality_settings(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Show quality threshold info."""
+        base_day = dn_config.get_base_day_quality()
+        base_night = dn_config.get_base_night_quality()
+        
+        text = (
+            "📊 *Quality Thresholds*\n\n"
+            f"Base Day: {base_day:.1f}\n"
+            f"Base Night: {base_night:.1f}\n\n"
+            "*Note:* Quality threshold changes require config edit.\n"
+            "Edit `config/config.json`:\n"
+            "```\n"
+            '"day_night": {\n'
+            f'  "base_day_min_quality": {base_day},\n'
+            f'  "base_night_min_quality": {base_night}\n'
+            '}\n'
+            "```"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
+        ])
+        
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    async def _show_streak_settings(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Show streak settings info."""
+        switch_at = dn_config.get_switch_streak_at()
+        night_max = dn_config.get_night_max_streak()
+        
+        text = (
+            "🔥 *Streak Settings*\n\n"
+            f"Switch to STRICT at: {switch_at} wins\n"
+            f"Night Max Streak: {night_max}\n\n"
+            "*Note:* Streak setting changes require config edit.\n"
+            "Edit `config/config.json`:\n"
+            "```\n"
+            '"day_night": {\n'
+            f'  "switch_streak_at": {switch_at},\n'
+            f'  "night_max_win_streak": {night_max}\n'
+            '}\n'
+            "```"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
+        ])
+        
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    async def _show_reminder_settings(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Show reminder settings with edit buttons."""
+        current_mins = dn_config.get_reminder_minutes()
+        
+        text = (
+            "⏰ *Day End Reminder*\n\n"
+            f"Current: {current_mins} minutes before day end\n"
+            f"{'(Disabled)' if current_mins == 0 else ''}\n\n"
+            "Select reminder time:\n"
+        )
+        
+        # Preset options
+        presets = [0, 15, 30, 45, 60, 90, 120, 180]
+        buttons = []
+        for mins in presets:
+            label = "Off" if mins == 0 else f"{mins}min"
+            marker = " ✓" if mins == current_mins else ""
+            buttons.append(InlineKeyboardButton(
+                text=f"{label}{marker}",
+                callback_data=f"settings_set_reminder_{mins}"
+            ))
+        
+        # Group into rows of 4
+        keyboard_rows = [buttons[i:i+4] for i in range(0, len(buttons), 4)]
+        keyboard_rows.append([InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    async def _set_reminder_minutes(self, callback: types.CallbackQuery, dn_config, minutes: int) -> None:
+        """Set reminder minutes."""
+        success = dn_config.set_reminder_minutes(minutes)
+        if success:
+            if minutes == 0:
+                await callback.answer("✅ Reminder disabled")
+            else:
+                await callback.answer(f"✅ Reminder set to {minutes} minutes")
+            await self._show_reminder_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _show_trading_info(self, callback: types.CallbackQuery) -> None:
+        """Show trading settings info."""
+        from src.common.config import get_config
+        config = get_config()
+        
+        text = (
+            "💰 *Trading Settings*\n\n"
+            f"Price Cap: {config.trading.get('price_cap', 0.55)}\n"
+            f"Confirm Delay: {config.trading.get('confirm_delay_seconds', 120)}s\n"
+            f"CAP Min Ticks: {config.trading.get('cap_min_ticks', 3)}\n\n"
+            "*Note:* Trading parameter changes require config edit.\n"
+            "Edit `config/config.json`:\n"
+            "```\n"
+            '"trading": {\n'
+            f'  "price_cap": {config.trading.get("price_cap", 0.55)},\n'
+            f'  "confirm_delay_seconds": {config.trading.get("confirm_delay_seconds", 120)},\n'
+            f'  "cap_min_ticks": {config.trading.get("cap_min_ticks", 3)}\n'
+            '}\n'
+            "```"
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
+        ])
+        
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
     
     async def _show_report(self, message: types.Message) -> None:
         """Show performance report."""

@@ -248,6 +248,86 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Day/Night Configuration with Telegram Settings
+
+**Change**: Implemented user-adjustable day/night trading time ranges via Telegram settings.
+
+**Details**:
+- Created `src/services/day_night_config.py`:
+  - `DayNightConfigService`: Manages day/night time ranges with persistence
+  - Supports wrap-around midnight scenarios (e.g., 22:00 to 06:00)
+  - All settings persist to SQLite settings table
+- Updated `src/adapters/telegram/bot.py`:
+  - Full settings menu with interactive editing
+  - Day hours selection with visual hour grid (0-23)
+  - Night autotrade toggle
+  - Reminder minutes configuration
+- Updated `/status` command:
+  - Shows current local time (Europe/Zurich)
+  - Shows day/night hours and current mode
+  - Shows reminder configuration
+
+**Persisted Settings** (via Telegram /settings):
+- Day Start Hour (0-23)
+- Day End Hour (0-23)
+- Night Auto-trade enabled/disabled
+- Reminder before day end (0-180 minutes)
+
+**Wrap-Around Logic**:
+- Normal: day_start < day_end (e.g., 8 to 22) → DAY if hour in [start, end)
+- Wrap: day_start >= day_end (e.g., 22 to 6) → DAY if hour >= start OR hour < end
+
+**Files Created**:
+- `src/services/day_night_config.py`
+- `src/tests/test_day_night_config.py` (11 tests)
+
+**Files Modified**:
+- `src/adapters/telegram/bot.py`
+- `CHANGE_LOG.md`
+- `CONFIG_CONTRACT.md`
+
+**Reason**: User request (R-1 through R-4) - Enable configurable day/night time ranges.
+
+**Behavior Changed**: Yes
+- Settings now persist to database and are editable via Telegram
+- Day/Night mode detection supports wrap-around midnight
+- /settings menu is now fully interactive
+
+---
+
+## 2026-01-21: Day End Reminder Service
+
+**Change**: Implemented automatic reminder before day trading window ends.
+
+**Details**:
+- Created `src/services/day_end_reminder.py`:
+  - `DayEndReminderService`: Sends reminders X minutes before day end
+  - `NightSessionMode`: OFF / SOFT_RESET / HARD_RESET options
+  - Rate-limited: max one reminder per day
+  - Timezone-aware (Europe/Zurich)
+- Reminder message includes:
+  - Current local time
+  - Day window end time
+  - Night Session Mode with explanation
+  - Execution mode and auth status
+  - Quick action buttons
+
+**Configurable via Telegram**:
+- `reminder_minutes_before_day_end`: 0-180 (0 = disabled)
+- Preset options: Off, 15, 30, 45, 60, 90, 120, 180 minutes
+
+**Files Created**:
+- `src/services/day_end_reminder.py`
+- `src/tests/test_day_end_reminder.py` (13 tests)
+
+**Reason**: User request - Add reminder before day window ends.
+
+**Behavior Changed**: Yes
+- New reminder feature (disabled by default)
+- Reminder can be configured via /settings
+
+---
+
 ## Template for Future Entries
 
 ```markdown

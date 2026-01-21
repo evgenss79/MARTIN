@@ -245,19 +245,37 @@ Invalid configuration will prevent the bot from starting.
 
 ## Runtime Modification
 
-Some settings can be changed at runtime via Telegram /settings:
+Settings can be changed at runtime via Telegram /settings with full interactive UI:
 
+**Currently Implemented** (with Telegram UI):
+- `day_start_hour`, `day_end_hour` - Hour selection grid (0-23)
+- `night_autotrade_enabled` - Toggle button
+- `reminder_minutes_before_day_end` - Preset options (0-180 min)
+
+**Planned** (requires config edit for now):
 - `price_cap`
 - `confirm_delay_seconds`
 - `cap_min_ticks`
-- `day_start_hour`, `day_end_hour`
 - `base_day_min_quality`, `base_night_min_quality`
 - `switch_streak_at`
 - `strict_day_q`, `strict_night_q`
 - `night_max_win_streak`
-- `night_autotrade_enabled`
 
 Runtime changes are stored in the `settings` table and persist across restarts.
+
+---
+
+## Section: reminder (NEW)
+
+| Key | Type | Default | Range | Description |
+|-----|------|---------|-------|-------------|
+| `day_night.reminder_minutes_before_day_end` | int | 30 | 0–180 | Minutes before day end to send reminder (0 = disabled) |
+
+**Features**:
+- Rate-limited: maximum one reminder per calendar day
+- Timezone-aware (Europe/Zurich)
+- Shows current night session mode with explanation
+- Quick action buttons for night mode toggle
 
 ---
 
