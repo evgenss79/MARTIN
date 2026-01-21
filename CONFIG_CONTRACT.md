@@ -154,6 +154,9 @@ Priority: Runtime > Environment > Config file
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `execution.mode` | string | "paper" | ⚠️ Execution mode: paper or live |
+| `execution.live.chain_id` | int | 137 | Polygon chain ID |
+| `execution.live.order_timeout_seconds` | int | 30 | Order timeout |
+| `execution.live.max_slippage` | float | 0.02 | Maximum slippage allowed |
 
 **Safety-Critical** (⚠️):
 - `execution.mode`: 
@@ -183,9 +186,15 @@ Priority: Runtime > Environment > Config file
 | `LOG_LEVEL` | No | Override config log level |
 | `TIMEZONE` | No | Override config timezone |
 | `EXECUTION_MODE` | No | Override execution mode |
-| `POLYMARKET_API_KEY` | For live | Polymarket API key |
-| `POLYMARKET_API_SECRET` | For live | Polymarket API secret |
-| `POLYMARKET_PASSPHRASE` | For live | Polymarket passphrase |
+| `POLYMARKET_PRIVATE_KEY` | For live | ⚠️ Wallet private key (MetaMask export) - Option 1 |
+| `POLYMARKET_API_KEY` | For live | Polymarket API key - Option 2 |
+| `POLYMARKET_API_SECRET` | For live | Polymarket API secret - Option 2 |
+| `POLYMARKET_PASSPHRASE` | For live | Polymarket passphrase - Option 2 |
+
+**Live Mode Authentication**:
+- **Option 1 (Wallet)**: Set `POLYMARKET_PRIVATE_KEY` with your wallet private key
+- **Option 2 (API Key)**: Set all three: `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
+- If both are set, wallet-based auth takes priority
 
 ---
 

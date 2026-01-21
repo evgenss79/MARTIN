@@ -70,7 +70,12 @@
     }
   },
   "execution": {
-    "mode": "paper"
+    "mode": "paper",
+    "live": {
+      "chain_id": 137,
+      "order_timeout_seconds": 30,
+      "max_slippage": 0.02
+    }
   },
   "rolling_quantile": {
     "rolling_days": 14,

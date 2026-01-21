@@ -134,6 +134,66 @@ docker-compose up -d
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token | Yes |
 | `LOG_LEVEL` | Log level (DEBUG/INFO/WARNING/ERROR) | No |
 | `EXECUTION_MODE` | Override execution mode | No |
+| `POLYMARKET_PRIVATE_KEY` | Wallet private key for live trading | For live |
+
+## Live Trading Setup
+
+⚠️ **WARNING**: Live trading uses real money. Start with paper mode to test.
+
+### Step 1: Enable Live Mode
+
+Set in `config/config.json`:
+```json
+{
+  "execution": {
+    "mode": "live"
+  }
+}
+```
+
+Or via environment variable:
+```bash
+EXECUTION_MODE=live
+```
+
+### Step 2: Configure Authentication
+
+**Option A: Wallet-based Auth (MetaMask)**
+
+1. Open MetaMask in your browser
+2. Click the account menu (three dots)
+3. Select "Account details"
+4. Click "Show private key"
+5. Enter your password and copy the key
+6. Add to `.env` file:
+   ```
+   POLYMARKET_PRIVATE_KEY=your_private_key_here
+   ```
+
+**Option B: API Key Auth**
+
+If you have Polymarket API credentials:
+```
+POLYMARKET_API_KEY=your_api_key
+POLYMARKET_API_SECRET=your_api_secret
+POLYMARKET_PASSPHRASE=your_passphrase
+```
+
+### Step 3: Security Best Practices
+
+- **Use a dedicated wallet** with only trading funds
+- **Never share** your private key or `.env` file
+- **Test first** with small amounts
+- **Monitor regularly** especially at the start
+
+### Live Trading Flow
+
+1. **Signal detected** → Quality calculated
+2. **Quality passes** → Wait for confirm_ts
+3. **CAP_PASS achieved** → Trade card sent to Telegram
+4. **User clicks ✅ OK** → Order placed on Polymarket CLOB
+5. **Order fills** → Wait for market resolution
+6. **Market resolves** → PnL calculated and recorded
 
 ## Telegram Commands
 

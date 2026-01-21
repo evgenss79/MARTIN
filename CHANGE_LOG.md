@@ -93,6 +93,55 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Live Execution Implementation
+
+**Change**: Implemented full live trading support with wallet-based authentication.
+
+**Details**:
+- Created `src/adapters/polymarket/signer.py`:
+  - `WalletSigner`: EIP-712 signing using wallet private key (MetaMask compatible)
+  - `ApiKeySigner`: HMAC signing using API key/secret/passphrase
+  - `OrderData`: Order structure for CLOB API
+- Updated `src/adapters/polymarket/clob_client.py`:
+  - Added `place_limit_order()`: Place orders on CLOB
+  - Added `get_order_status()`: Check order fill status
+  - Added `cancel_order()`: Cancel open orders
+  - Added `get_open_orders()`: List all open orders
+  - Added `OrderResult` and `OrderStatus` classes
+- Updated `src/services/execution.py`:
+  - Full live mode implementation using CLOB client
+  - Automatic auth method detection (wallet first, then API key)
+  - Order cancellation support
+- Updated configuration:
+  - Added `execution.live` section in config.json
+  - Added wallet auth environment variables in .env.example
+- Added `eth-account>=0.10.0` to requirements.txt
+- Updated documentation:
+  - CONFIG_CONTRACT.md: New execution settings and env vars
+  - ARCHITECTURE.md: Execution engine details
+
+**Files Created**:
+- `src/adapters/polymarket/signer.py`
+
+**Files Modified**:
+- `src/adapters/polymarket/clob_client.py`
+- `src/adapters/polymarket/__init__.py`
+- `src/services/execution.py`
+- `config/config.json`
+- `.env.example`
+- `requirements.txt`
+- `CONFIG_CONTRACT.md`
+- `ARCHITECTURE.md`
+
+**Reason**: Feature request (Item 1 & 2) - Enable live bet placement after user confirmation in Day mode.
+
+**Behavior Changed**: Yes
+- Live mode now functional when credentials are provided
+- Paper mode remains default (MG-9 constraint preserved)
+- New environment variable `POLYMARKET_PRIVATE_KEY` for wallet auth
+
+---
+
 ## Template for Future Entries
 
 ```markdown

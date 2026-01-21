@@ -3,10 +3,20 @@ Execution Service for MARTIN.
 
 Handles order placement in paper or live mode.
 Default is paper mode (MG-9 safety constraint).
+
+Live mode requires wallet credentials configured via environment variables:
+- POLYMARKET_PRIVATE_KEY: Wallet private key for signing (MetaMask export)
+
+OR
+
+- POLYMARKET_API_KEY: API key
+- POLYMARKET_API_SECRET: API secret
+- POLYMARKET_PASSPHRASE: Passphrase
 """
 
 import time
 import uuid
+import os
 from typing import Any
 
 from src.domain.models import Trade, Signal, MarketWindow
@@ -23,7 +33,14 @@ class ExecutionService:
     
     Supports paper mode (default) and live mode.
     Paper mode simulates fills when CAP_PASS is found.
-    Live mode places real orders (requires implementation of signing).
+    Live mode places real orders via Polymarket CLOB.
+    
+    Live Mode Requirements:
+        Either wallet-based auth (MetaMask compatible):
+            - Set POLYMARKET_PRIVATE_KEY environment variable
+            
+        Or API key-based auth:
+            - Set POLYMARKET_API_KEY, POLYMARKET_API_SECRET, POLYMARKET_PASSPHRASE
     """
     
     def __init__(
@@ -31,6 +48,7 @@ class ExecutionService:
         mode: str = "paper",
         base_stake_amount: float = 10.0,
         price_cap: float = 0.55,
+        clob_client: Any = None,
     ):
         """
         Initialize Execution Service.
@@ -39,16 +57,55 @@ class ExecutionService:
             mode: Execution mode ("paper" or "live")
             base_stake_amount: Default stake amount in USDC
             price_cap: Price cap for orders
+            clob_client: CLOB client for live trading
         """
         self._mode = mode
         self._base_stake = base_stake_amount
         self._price_cap = price_cap
+        self._clob_client = clob_client
+        self._signer = None
         
         if mode == "live":
-            logger.warning(
-                "LIVE execution mode enabled - real orders will be placed. "
-                "Ensure credentials are configured."
-            )
+            self._init_live_mode()
+    
+    def _init_live_mode(self) -> None:
+        """Initialize live mode with signer."""
+        logger.warning(
+            "LIVE execution mode enabled - real orders will be placed. "
+            "Ensure credentials are configured."
+        )
+        
+        # Try wallet-based auth first
+        if os.environ.get("POLYMARKET_PRIVATE_KEY"):
+            try:
+                from src.adapters.polymarket.signer import WalletSigner
+                self._signer = WalletSigner()
+                self._auth_type = "wallet"
+                logger.info(
+                    "Using wallet-based authentication",
+                    address=self._signer.address,
+                )
+                return
+            except Exception as e:
+                logger.warning(f"Failed to init wallet signer: {e}")
+        
+        # Fall back to API key auth
+        if os.environ.get("POLYMARKET_API_KEY"):
+            try:
+                from src.adapters.polymarket.signer import ApiKeySigner
+                self._signer = ApiKeySigner()
+                self._auth_type = "api_key"
+                logger.info("Using API key-based authentication")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to init API key signer: {e}")
+        
+        # No valid credentials
+        raise TradeError(
+            "Live mode requires authentication credentials. "
+            "Set POLYMARKET_PRIVATE_KEY (wallet) or "
+            "POLYMARKET_API_KEY/SECRET/PASSPHRASE (API key)."
+        )
     
     @property
     def is_paper_mode(self) -> bool:
@@ -153,10 +210,7 @@ class ExecutionService:
         """
         Place real order in live mode.
         
-        NOTE: This is a placeholder. Real implementation requires:
-        - Polymarket API credentials
-        - Order signing logic
-        - Order placement and confirmation
+        Uses CLOB API with wallet/API key authentication.
         
         Args:
             window: Market window
@@ -169,26 +223,64 @@ class ExecutionService:
             Tuple of (order_id, token_id, fill_price)
             
         Raises:
-            TradeError: If live trading not implemented
+            TradeError: If order placement fails
         """
-        # TODO: Implement live trading when credentials are available
-        # This requires:
-        # 1. API key authentication
-        # 2. Order signing with private key
-        # 3. Order placement via CLOB API
-        # 4. Order status monitoring
-        # 5. Fill confirmation
+        if not self._clob_client:
+            raise TradeError("CLOB client not initialized for live trading")
         
-        logger.error(
-            "Live trading not fully implemented",
+        if not self._signer:
+            raise TradeError("Signer not initialized for live trading")
+        
+        # Calculate order size based on stake and price cap
+        # size = stake / price (number of contracts)
+        order_price = self._price_cap
+        order_size = stake_amount / order_price
+        
+        logger.info(
+            "Placing live order",
+            token_id=token_id[:16] + "...",
+            side="BUY",  # Always BUY the predicted outcome
+            price=order_price,
+            size=order_size,
+            stake=stake_amount,
+        )
+        
+        # Get auth headers
+        auth_headers = self._signer.generate_auth_headers()
+        
+        # Place the order
+        from src.adapters.polymarket.clob_client import OrderStatus
+        
+        result = await self._clob_client.place_limit_order(
+            token_id=token_id,
+            side="BUY",
+            price=order_price,
+            size=order_size,
+            auth_headers=auth_headers,
+        )
+        
+        if result.error or result.status == OrderStatus.CANCELLED:
+            logger.error(
+                "Live order failed",
+                error=result.error,
+                token_id=token_id[:16] + "...",
+            )
+            raise TradeError(f"Order placement failed: {result.error}")
+        
+        # Log success
+        logger.info(
+            "Live order placed",
+            order_id=result.order_id,
             direction=direction,
+            token_id=token_id[:16] + "...",
             stake_amount=stake_amount,
+            status=result.status.value,
         )
         
-        raise TradeError(
-            "Live trading requires API credentials and signing implementation. "
-            "Set execution.mode='paper' in config for simulation."
-        )
+        # Determine fill price
+        fill_price = result.filled_price if result.filled_price else order_price
+        
+        return result.order_id, token_id, fill_price
     
     async def check_order_status(self, order_id: str) -> tuple[FillStatus, float | None]:
         """
@@ -204,8 +296,47 @@ class ExecutionService:
             # Paper orders are always filled immediately
             return FillStatus.FILLED, self._price_cap
         
-        # TODO: Implement live order status check
-        return FillStatus.PENDING, None
+        if not self._clob_client or not self._signer:
+            logger.warning("Cannot check order status: no CLOB client/signer")
+            return FillStatus.PENDING, None
+        
+        from src.adapters.polymarket.clob_client import OrderStatus
+        
+        auth_headers = self._signer.generate_auth_headers()
+        result = await self._clob_client.get_order_status(order_id, auth_headers)
+        
+        # Map CLOB status to FillStatus
+        status_map = {
+            OrderStatus.FILLED: FillStatus.FILLED,
+            OrderStatus.PARTIAL: FillStatus.PARTIAL,
+            OrderStatus.CANCELLED: FillStatus.CANCELLED,
+            OrderStatus.EXPIRED: FillStatus.CANCELLED,
+            OrderStatus.LIVE: FillStatus.PENDING,
+        }
+        
+        fill_status = status_map.get(result.status, FillStatus.PENDING)
+        return fill_status, result.filled_price
+    
+    async def cancel_order(self, order_id: str) -> bool:
+        """
+        Cancel an open order.
+        
+        Args:
+            order_id: Order ID to cancel
+            
+        Returns:
+            True if cancelled successfully
+        """
+        if self.is_paper_mode:
+            logger.info("Paper order cancelled", order_id=order_id)
+            return True
+        
+        if not self._clob_client or not self._signer:
+            logger.warning("Cannot cancel order: no CLOB client/signer")
+            return False
+        
+        auth_headers = self._signer.generate_auth_headers()
+        return await self._clob_client.cancel_order(order_id, auth_headers)
     
     async def settle_trade(
         self,

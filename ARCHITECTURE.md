@@ -90,13 +90,26 @@ DOWN signal: high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[
 
 **Purpose**: Place orders
 
-- Paper mode (default): Simulates fills
-- Live mode: Placeholder for real order placement (requires credentials)
-- Calculates stake amount
-- Records order ID and fill status
+- **Paper mode** (default): Simulates fills at PRICE_CAP
+- **Live mode**: Places real orders via Polymarket CLOB
+  - Wallet-based auth (MetaMask compatible): Uses `POLYMARKET_PRIVATE_KEY`
+  - API key-based auth: Uses `POLYMARKET_API_KEY`, `API_SECRET`, `PASSPHRASE`
+- Calculates stake amount (fixed mode)
+- Records order ID, token ID, fill status, and fill price
+
+**Live Mode Components**:
+- `adapters/polymarket/signer.py`: Wallet signing (EIP-712) and API key auth
+- `adapters/polymarket/clob_client.py`: Order placement, status check, cancellation
+
+**Flow** (Day Mode):
+```
+User OK → ExecutionService.place_order() → 
+  If paper: Generate PAPER_xxx order ID, fill at PRICE_CAP
+  If live:  Sign order → CLOB.place_limit_order() → Return order_id
+```
 
 **Inputs**: Trade, signal, window, stake amount
-**Outputs**: Order ID, fill price
+**Outputs**: Order ID, token ID, fill price
 
 ---
 
