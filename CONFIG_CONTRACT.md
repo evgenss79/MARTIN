@@ -186,15 +186,52 @@ Priority: Runtime > Environment > Config file
 | `LOG_LEVEL` | No | Override config log level |
 | `TIMEZONE` | No | Override config timezone |
 | `EXECUTION_MODE` | No | Override execution mode |
+| `MASTER_ENCRYPTION_KEY` | Recommended | ⚠️ Master key for encrypting secrets at rest (32 bytes, base64) |
 | `POLYMARKET_PRIVATE_KEY` | For live | ⚠️ Wallet private key (MetaMask export) - Option 1 |
 | `POLYMARKET_API_KEY` | For live | Polymarket API key - Option 2 |
 | `POLYMARKET_API_SECRET` | For live | Polymarket API secret - Option 2 |
 | `POLYMARKET_PASSPHRASE` | For live | Polymarket passphrase - Option 2 |
 
+**Security-Critical** (⚠️):
+- `MASTER_ENCRYPTION_KEY`: Enables encryption of secrets at rest (SEC-1). Generate with:
+  ```
+  python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+  ```
+
 **Live Mode Authentication**:
 - **Option 1 (Wallet)**: Set `POLYMARKET_PRIVATE_KEY` with your wallet private key
 - **Option 2 (API Key)**: Set all three: `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_PASSPHRASE`
 - If both are set, wallet-based auth takes priority
+- If `MASTER_ENCRYPTION_KEY` is set, credentials are encrypted before persistence
+
+---
+
+## Security Configuration
+
+### SEC-1: No Plaintext Secrets at Rest
+
+When `MASTER_ENCRYPTION_KEY` is configured:
+- Wallet private keys are encrypted using AES-256-GCM before storage
+- Session tokens are encrypted before persistence
+- API secrets are encrypted in the vault
+
+### SEC-2: Master Key Handling
+
+- Master key must be exactly 32 bytes (256 bits), base64 encoded
+- If `MASTER_ENCRYPTION_KEY` is missing and `execution.mode == "live"`:
+  - Live trading still works but with security warning
+  - Credentials remain in environment only (not persisted encrypted)
+- Master key should be:
+  - Generated once and stored securely
+  - Never committed to version control
+  - Backed up securely (losing it means re-encrypting all secrets)
+
+### SEC-3: Session Management
+
+- One-time wallet authorization creates a session
+- Sessions are cached (encrypted) for autonomous trades
+- Default session expiry: 24 hours
+- Sessions can be invalidated via Telegram commands
 
 ---
 

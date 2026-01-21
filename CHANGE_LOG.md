@@ -186,6 +186,68 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Security Hardening - Encryption at Rest
+
+**Change**: Implemented encryption for secrets at rest (SEC-1, SEC-2 compliance).
+
+**Details**:
+- Created `src/common/crypto.py`:
+  - `CryptoService`: AES-256-GCM encryption/decryption
+  - `EncryptedData`: Container for encrypted data (iv || ciphertext || tag)
+  - `generate_master_key()`: Utility to generate new master keys
+  - `validate_master_key()`: Validation of MASTER_ENCRYPTION_KEY
+- Created `src/services/secure_vault.py`:
+  - `SecureVault`: Encrypted storage for credentials
+  - `AuthSession`: Session management for autonomous trading
+  - `check_secure_auth_status()`: Comprehensive auth status check
+  - Vault persistence with encrypted file storage
+- Updated `src/services/status_indicator.py`:
+  - Added `EncryptionIndicator` (🔒/🔓)
+  - Added `compute_encryption_indicator()` function
+  - Added `get_security_summary()` for comprehensive status
+- Updated `src/common/exceptions.py`:
+  - Added `SecurityError` exception class
+- Updated `.env.example`:
+  - Added `MASTER_ENCRYPTION_KEY` documentation
+  - Added security warnings and key generation instructions
+- Updated `requirements.txt`:
+  - Added `cryptography>=41.0.0` for AES-GCM
+- Created comprehensive tests:
+  - `src/tests/test_crypto.py`: Encryption roundtrip, tampering detection
+  - `src/tests/test_secure_vault.py`: Vault storage, session management
+
+**Security Requirements Implemented**:
+- SEC-1: No plaintext secrets at rest - all credentials encrypted with AES-256-GCM
+- SEC-2: Master key handling via MASTER_ENCRYPTION_KEY environment variable
+- SEC-3: Session keys for autonomous trading with expiration
+
+**Files Created**:
+- `src/common/crypto.py`
+- `src/services/secure_vault.py`
+- `src/tests/test_crypto.py`
+- `src/tests/test_secure_vault.py`
+
+**Files Modified**:
+- `src/common/exceptions.py`
+- `src/services/status_indicator.py`
+- `.env.example`
+- `requirements.txt`
+- `CONFIG_CONTRACT.md`
+- `CHANGE_LOG.md`
+
+**Reason**: Security hardening per user request. Enables secure storage of wallet credentials.
+
+**Behavior Changed**: Yes
+- New encryption layer for secrets at rest
+- New environment variable: MASTER_ENCRYPTION_KEY
+- New status indicator: Encryption Status (🔒/🔓)
+- If MASTER_ENCRYPTION_KEY is not set:
+  - Live trading still works (credentials from env only)
+  - Security warning is logged
+  - Encryption indicator shows 🔓
+
+---
+
 ## Template for Future Entries
 
 ```markdown

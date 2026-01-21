@@ -60,3 +60,8 @@ class StorageError(MartinError):
 class TelegramError(MartinError):
     """Telegram bot errors."""
     pass
+
+
+class SecurityError(MartinError):
+    """Security-related errors (encryption, auth, etc.)."""
+    pass

@@ -100,6 +100,7 @@ DOWN signal: high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[
 **Live Mode Components**:
 - `adapters/polymarket/signer.py`: Wallet signing (EIP-712) and API key auth
 - `adapters/polymarket/clob_client.py`: Order placement, status check, cancellation
+- `services/secure_vault.py`: Encrypted credential storage
 
 **Flow** (Day Mode):
 ```
@@ -110,6 +111,38 @@ User OK → ExecutionService.place_order() →
 
 **Inputs**: Trade, signal, window, stake amount
 **Outputs**: Order ID, token ID, fill price
+
+---
+
+### 5a. Security Layer (`common/crypto.py`, `services/secure_vault.py`)
+
+**Purpose**: Protect credentials at rest
+
+**CryptoService** (`common/crypto.py`):
+- AES-256-GCM authenticated encryption
+- Master key from `MASTER_ENCRYPTION_KEY` env var
+- Random IV per encryption (prevents pattern analysis)
+- Tamper detection via authentication tag
+
+**SecureVault** (`services/secure_vault.py`):
+- Encrypted storage for wallet private keys
+- Session management for autonomous trading
+- Vault persistence to encrypted file
+
+**Security Requirements**:
+- SEC-1: No plaintext secrets at rest
+- SEC-2: Master key in environment only (never persisted)
+- SEC-3: Session expiration for autonomous trades
+
+**Flow** (One-time authorization):
+```
+1. User initiates /authorize in Telegram
+2. Bot generates authorization message
+3. User signs with MetaMask (one-time)
+4. Bot creates AuthSession (encrypted)
+5. Session used for autonomous trades
+6. Session expires after 24 hours
+```
 
 ---
 
@@ -180,6 +213,7 @@ MARTIN/
     ├── common/
     │   ├── config.py        # Config loading
     │   ├── logging.py       # Structured logging
+    │   ├── crypto.py        # AES-256-GCM encryption
     │   └── exceptions.py    # Custom exceptions
     ├── domain/
     │   ├── enums.py         # Status enumerations
@@ -189,7 +223,8 @@ MARTIN/
     │   │   └── bot.py       # Telegram bot
     │   ├── polymarket/
     │   │   ├── gamma_client.py   # Market discovery
-    │   │   ├── clob_client.py    # Price history
+    │   │   ├── clob_client.py    # Price history + orders
+    │   │   ├── signer.py         # Wallet/API signing
     │   │   └── binance_client.py # Candle data
     │   └── storage/
     │       ├── database.py       # SQLite connection
@@ -201,13 +236,18 @@ MARTIN/
     │   ├── time_mode.py      # Day/Night logic
     │   ├── stats_service.py  # Streaks & quantiles
     │   ├── execution.py      # Order execution
+    │   ├── secure_vault.py   # Encrypted credential storage
+    │   ├── status_indicator.py # Status indicators
     │   └── orchestrator.py   # Main coordinator
     ├── jobs/
     │   └── scheduler.py      # Scheduled tasks
     └── tests/
         ├── test_cap_pass.py       # CAP_PASS tests
         ├── test_ta_engine.py      # TA engine tests
-        └── test_state_machine.py  # State machine tests
+        ├── test_state_machine.py  # State machine tests
+        ├── test_status_indicator.py # Status indicator tests
+        ├── test_crypto.py         # Encryption tests
+        └── test_secure_vault.py   # Vault tests
 ```
 
 ---
