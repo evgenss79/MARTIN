@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta
 
 from src.domain.models import Stats, Trade, Signal
-from src.domain.enums import TimeMode, PolicyMode, Decision, FillStatus
+from src.domain.enums import TimeMode, PolicyMode, Decision, FillStatus, NightSessionMode
 from src.adapters.storage import StatsRepository, TradeRepository, SignalRepository
 from src.common.logging import get_logger
 
@@ -75,6 +75,11 @@ class StatsService:
     Key constraints (Memory Gate):
     - MG-1: Trade-level streak counts only taken (OK/AUTO_OK) AND filled trades
     - MG-7: Auto-switch to STRICT at SWITCH_STREAK_AT, revert on loss/night reset
+    
+    Night Session Modes:
+    - OFF: Night trading disabled
+    - SOFT_RESET: On session cap, reset only night_streak
+    - HARD_RESET: On session cap, reset both night_streak AND trade_level_streak
     """
     
     def __init__(
@@ -83,7 +88,7 @@ class StatsService:
         trade_repo: TradeRepository,
         switch_streak_at: int = 3,
         night_max_win_streak: int = 5,
-        night_session_resets_trade_streak: bool = True,
+        night_session_mode: NightSessionMode = NightSessionMode.OFF,
         strict_day_q: str = "p95",
         strict_night_q: str = "p95",
         rolling_days: int = 14,
@@ -101,7 +106,7 @@ class StatsService:
             trade_repo: Trade repository
             switch_streak_at: Streak count to trigger STRICT mode
             night_max_win_streak: Max night wins before session reset
-            night_session_resets_trade_streak: Whether night reset also resets trade streak
+            night_session_mode: Night session mode (OFF/SOFT_RESET/HARD_RESET)
             strict_day_q: Quantile for strict day threshold
             strict_night_q: Quantile for strict night threshold
             rolling_days: Days to include in rolling quantile
@@ -116,7 +121,7 @@ class StatsService:
         self._signal_repo: SignalRepository | None = None  # Lazy init
         self._switch_streak_at = switch_streak_at
         self._night_max_win_streak = night_max_win_streak
-        self._night_resets_trade = night_session_resets_trade_streak
+        self._night_session_mode = night_session_mode
         self._strict_day_q = QUANTILE_MAP.get(strict_day_q, 0.95)
         self._strict_night_q = QUANTILE_MAP.get(strict_night_q, 0.95)
         self._rolling_days = rolling_days
@@ -125,6 +130,20 @@ class StatsService:
         self._fallback_mult = strict_fallback_mult
         self._base_day_q = base_day_min_quality
         self._base_night_q = base_night_min_quality
+    
+    def set_night_session_mode(self, mode: NightSessionMode) -> None:
+        """
+        Update night session mode at runtime.
+        
+        Args:
+            mode: New night session mode
+        """
+        self._night_session_mode = mode
+        logger.info("Stats service night session mode updated", mode=mode.value)
+    
+    def get_night_session_mode(self) -> NightSessionMode:
+        """Get current night session mode."""
+        return self._night_session_mode
     
     def _get_signal_repo(self) -> SignalRepository:
         """Get or create signal repository (lazy initialization)."""
@@ -230,10 +249,14 @@ class StatsService:
     
     def _apply_night_session_reset(self, stats: Stats) -> Stats:
         """
-        Apply night session reset.
+        Apply night session reset based on NightSessionMode.
         
-        Resets night_streak and policy_mode to BASE.
-        Also resets trade_level_streak if configured (default: yes).
+        Behavior by mode:
+        - OFF: Should not be called (night trading disabled)
+        - SOFT_RESET: Reset only night_streak, keep trade_level_streak
+        - HARD_RESET: Reset night_streak AND trade_level_streak (+ series counters)
+        
+        Policy mode always reverts to BASE on reset.
         
         Args:
             stats: Current stats
@@ -241,12 +264,23 @@ class StatsService:
         Returns:
             Updated stats
         """
+        # Always reset night streak and policy
         stats.night_streak = 0
         stats.policy_mode = PolicyMode.BASE
         
-        if self._night_resets_trade:
+        if self._night_session_mode == NightSessionMode.HARD_RESET:
+            # HARD reset: reset all streaks and series counters
             stats.trade_level_streak = 0
-            logger.info("Night session reset - also resetting trade_level_streak")
+            logger.info(
+                "Night session HARD reset - resetting all streaks and series",
+                previous_trade_streak=stats.trade_level_streak,
+            )
+        else:
+            # SOFT reset (or OFF which shouldn't reach here): only night_streak
+            logger.info(
+                "Night session SOFT reset - trade_level_streak continues",
+                trade_level_streak=stats.trade_level_streak,
+            )
         
         return stats
     

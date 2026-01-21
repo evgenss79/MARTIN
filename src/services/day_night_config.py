@@ -3,12 +3,13 @@ Day/Night Configuration Service for MARTIN.
 
 Manages user-configurable day/night time ranges with persistence.
 Supports wrap-around midnight scenarios (e.g., 22:00 to 06:00).
+Supports NightSessionMode for A/B/C night trading behaviors.
 """
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from src.domain.enums import TimeMode
+from src.domain.enums import TimeMode, NightSessionMode
 from src.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +24,7 @@ SETTING_NIGHT_AUTOTRADE = "day_night.night_autotrade_enabled"
 SETTING_NIGHT_MAX_STREAK = "day_night.night_max_win_streak"
 SETTING_SWITCH_STREAK_AT = "day_night.switch_streak_at"
 SETTING_REMINDER_MINUTES = "day_night.reminder_minutes_before_day_end"
+SETTING_NIGHT_SESSION_MODE = "day_night.night_session_mode"
 
 
 class DayNightConfigService:
@@ -50,6 +52,7 @@ class DayNightConfigService:
         default_night_max_streak: int = 5,
         default_switch_streak_at: int = 3,
         default_reminder_minutes: int = 30,
+        default_night_session_mode: str = "OFF",
     ):
         """
         Initialize Day/Night Configuration Service.
@@ -64,6 +67,7 @@ class DayNightConfigService:
             default_night_max_streak: Default night max win streak
             default_switch_streak_at: Default streak count for STRICT mode
             default_reminder_minutes: Default reminder minutes before day end
+            default_night_session_mode: Default night session mode (OFF/SOFT/HARD)
         """
         self._settings_repo = settings_repo
         self._tz = ZoneInfo(self.TIMEZONE)
@@ -78,6 +82,7 @@ class DayNightConfigService:
             SETTING_NIGHT_MAX_STREAK: default_night_max_streak,
             SETTING_SWITCH_STREAK_AT: default_switch_streak_at,
             SETTING_REMINDER_MINUTES: default_reminder_minutes,
+            SETTING_NIGHT_SESSION_MODE: default_night_session_mode,
         }
     
     def _get_setting(self, key: str) -> str | None:
@@ -264,6 +269,99 @@ class DayNightConfigService:
         logger.info("Updated reminder minutes", minutes=minutes)
         return True
     
+    def get_night_session_mode(self) -> NightSessionMode:
+        """
+        Get current night session mode.
+        
+        Returns:
+            NightSessionMode (OFF, SOFT_RESET, or HARD_RESET)
+        """
+        stored = self._get_setting(SETTING_NIGHT_SESSION_MODE)
+        if stored is not None:
+            try:
+                return NightSessionMode(stored)
+            except ValueError:
+                # Invalid stored value, return default
+                logger.warning("Invalid night session mode stored, using default", stored=stored)
+        return NightSessionMode(self._defaults[SETTING_NIGHT_SESSION_MODE])
+    
+    def set_night_session_mode(self, mode: NightSessionMode | str) -> bool:
+        """
+        Set night session mode.
+        
+        Args:
+            mode: NightSessionMode enum or string value (OFF/SOFT/HARD)
+            
+        Returns:
+            True if successfully set
+        """
+        if isinstance(mode, str):
+            try:
+                mode = NightSessionMode(mode)
+            except ValueError:
+                logger.error("Invalid night session mode", mode=mode)
+                return False
+        
+        # Update night_autotrade_enabled based on mode
+        # OFF means night autotrade disabled, others mean enabled
+        autotrade_enabled = mode != NightSessionMode.OFF
+        self._set_setting(SETTING_NIGHT_AUTOTRADE, str(autotrade_enabled).lower())
+        self._set_setting(SETTING_NIGHT_SESSION_MODE, mode.value)
+        logger.info(
+            "Updated night session mode",
+            mode=mode.value,
+            autotrade_enabled=autotrade_enabled,
+        )
+        return True
+    
+    def get_night_session_mode_description(self, mode: NightSessionMode | None = None) -> str:
+        """
+        Get human-readable description of night session mode.
+        
+        Args:
+            mode: Mode to describe (uses current if None)
+            
+        Returns:
+            Description string
+        """
+        if mode is None:
+            mode = self.get_night_session_mode()
+        
+        descriptions = {
+            NightSessionMode.OFF: (
+                "🌙❌ OFF - Night trading disabled. Series freezes overnight."
+            ),
+            NightSessionMode.SOFT_RESET: (
+                "🌙🔵 SOFT - On night session cap: reset night_streak only. "
+                "Trade-level streak continues."
+            ),
+            NightSessionMode.HARD_RESET: (
+                "🌙🔴 HARD - On night session cap: reset ALL streaks + series counters. "
+                "Full reset."
+            ),
+        }
+        return descriptions.get(mode, "Unknown mode")
+    
+    def get_night_session_mode_short(self, mode: NightSessionMode | None = None) -> str:
+        """
+        Get short label for night session mode.
+        
+        Args:
+            mode: Mode to describe (uses current if None)
+            
+        Returns:
+            Short label
+        """
+        if mode is None:
+            mode = self.get_night_session_mode()
+        
+        labels = {
+            NightSessionMode.OFF: "🌙❌ OFF",
+            NightSessionMode.SOFT_RESET: "🌙🔵 SOFT",
+            NightSessionMode.HARD_RESET: "🌙🔴 HARD",
+        }
+        return labels.get(mode, "?")
+    
     def _validate_hour(self, hour: int) -> bool:
         """Validate hour is in range 0-23."""
         return isinstance(hour, int) and 0 <= hour <= 23
@@ -407,4 +505,5 @@ class DayNightConfigService:
             "night_max_streak": self.get_night_max_streak(),
             "switch_streak_at": self.get_switch_streak_at(),
             "reminder_minutes": self.get_reminder_minutes(),
+            "night_session_mode": self.get_night_session_mode().value,
         }

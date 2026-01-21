@@ -58,11 +58,18 @@ Priority: Runtime > Environment > Config file
 | `day_night.strict_night_q` | string | "p95" | p90/p95/p97/p99 | Quantile for STRICT night threshold |
 | `day_night.night_max_win_streak` | int | 5 | ≥ 1 | ⚠️ Max night wins before session reset |
 | `day_night.night_autotrade_enabled` | bool | false | — | ⚠️ Enable autonomous night trading |
-| `day_night.night_session_resets_trade_streak` | bool | true | — | Reset trade_level_streak on night reset |
+| `day_night.night_session_mode` | string | "OFF" | OFF/SOFT/HARD | ⚠️ Night session reset behavior |
+| `day_night.reminder_minutes_before_day_end` | int | 30 | 0–180 | Reminder minutes (0=disabled) |
+
+**Night Session Mode** (⚠️ Safety-Critical):
+- `OFF`: Night trading disabled. Series freezes overnight.
+- `SOFT`: On night session cap, reset only night_streak. Trade-level streak continues.
+- `HARD`: On night session cap, reset ALL streaks and series counters.
 
 **Safety-Critical** (⚠️):
 - `night_autotrade_enabled`: Only enable when confident in system
 - `night_max_win_streak`: Caps autonomous trading risk
+- `night_session_mode`: Controls reset behavior on session cap
 - Quality thresholds: Control trade selectivity
 
 ---

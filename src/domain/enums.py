@@ -80,3 +80,22 @@ class CancelReason(str, Enum):
     CAP_FAIL = "CAP_FAIL"   # CAP check failed
     PAUSED = "PAUSED"       # Bot is paused
     NIGHT_DISABLED = "NIGHT_DISABLED"  # Night trading disabled
+
+
+class NightSessionMode(str, Enum):
+    """
+    Night session mode controlling overnight trading behavior.
+    
+    The user can quickly switch among these modes via Telegram,
+    especially near Day→Night boundary.
+    
+    Values:
+    - OFF: Night autotrade disabled. Series freezes overnight.
+    - SOFT_RESET: Night autotrade enabled. On session reset (after max wins),
+                  only night_streak resets. trade_level_streak continues.
+    - HARD_RESET: Night autotrade enabled. On session reset,
+                  both night_streak AND trade_level_streak reset (+ series counters).
+    """
+    OFF = "OFF"           # Scenario A: Night trading disabled
+    SOFT_RESET = "SOFT"   # Scenario B: Reset only night_streak
+    HARD_RESET = "HARD"   # Scenario C: Reset all streaks + series counters

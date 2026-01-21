@@ -18,7 +18,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.enums import ParseMode
 
 from src.domain.models import Trade, Signal, MarketWindow, QualityBreakdown, Stats
-from src.domain.enums import TimeMode, PolicyMode, TradeStatus
+from src.domain.enums import TimeMode, PolicyMode, TradeStatus, NightSessionMode
 from src.common.logging import get_logger
 from src.services.status_indicator import (
     compute_series_indicator,
@@ -110,6 +110,8 @@ class TelegramHandler:
             current_mode = dn_config.get_current_mode()
             current_time = dn_config.get_current_local_time()
             reminder_mins = dn_config.get_reminder_minutes()
+            night_session_mode = dn_config.get_night_session_mode()
+            night_mode_short = dn_config.get_night_session_mode_short()
             
             mode_emoji = "☀️" if current_mode.value == "DAY" else "🌙"
             
@@ -122,6 +124,7 @@ class TelegramHandler:
                 f"├ Local: {current_time.strftime('%H:%M %Z')}\n"
                 f"├ Mode: {mode_emoji} {current_mode.value}\n"
                 f"└ Day Hours: {day_start:02d}:00 → {day_end:02d}:00\n\n"
+                f"*Night Session:* {night_mode_short}\n"
                 f"*Policy:* {stats.policy_mode.value}\n"
                 f"*Streaks:*\n"
                 f"├ Trade: {stats.trade_level_streak}\n"
@@ -492,7 +495,8 @@ class TelegramHandler:
         day_end = dn_config.get_day_end_hour()
         base_day_q = dn_config.get_base_day_quality()
         base_night_q = dn_config.get_base_night_quality()
-        night_auto = dn_config.get_night_autotrade_enabled()
+        night_session_mode = dn_config.get_night_session_mode()
+        night_mode_short = dn_config.get_night_session_mode_short()
         night_max = dn_config.get_night_max_streak()
         switch_at = dn_config.get_switch_streak_at()
         reminder_mins = dn_config.get_reminder_minutes()
@@ -510,8 +514,9 @@ class TelegramHandler:
             f"*Quality Thresholds:*\n"
             f"├ Base Day: {base_day_q:.1f}\n"
             f"└ Base Night: {base_night_q:.1f}\n\n"
+            f"*Night Session Mode:*\n"
+            f"└ {night_mode_short}\n\n"
             f"*Night Settings:*\n"
-            f"├ Auto-trade: {'✅ Enabled' if night_auto else '❌ Disabled'}\n"
             f"└ Max Streak: {night_max}\n\n"
             f"*Streak Settings:*\n"
             f"└ Switch to STRICT at: {switch_at} wins\n\n"
@@ -529,7 +534,7 @@ class TelegramHandler:
                 InlineKeyboardButton(text="📊 Quality", callback_data="settings_quality"),
             ],
             [
-                InlineKeyboardButton(text="🌙 Night Auto", callback_data="settings_night_auto"),
+                InlineKeyboardButton(text="🌙 Night Mode", callback_data="settings_night_mode"),
                 InlineKeyboardButton(text="🔥 Streaks", callback_data="settings_streaks"),
             ],
             [
@@ -551,6 +556,8 @@ class TelegramHandler:
         
         if setting_name == "day_hours":
             await self._show_day_hours_settings(callback, dn_config)
+        elif setting_name == "night_mode":
+            await self._show_night_mode_settings(callback, dn_config)
         elif setting_name == "night_auto":
             await self._toggle_night_auto(callback, dn_config)
         elif setting_name == "quality":
@@ -570,6 +577,9 @@ class TelegramHandler:
         elif setting_name.startswith("set_reminder_"):
             minutes = int(setting_name.replace("set_reminder_", ""))
             await self._set_reminder_minutes(callback, dn_config, minutes)
+        elif setting_name.startswith("set_night_mode_"):
+            mode = setting_name.replace("set_night_mode_", "")
+            await self._set_night_session_mode(callback, dn_config, mode)
         elif setting_name == "toggle_night_auto":
             await self._toggle_night_auto(callback, dn_config)
         else:
@@ -651,6 +661,70 @@ class TelegramHandler:
         
         # Refresh settings menu
         await self._show_settings_menu(callback.message)
+    
+    async def _show_night_mode_settings(self, callback: types.CallbackQuery, dn_config) -> None:
+        """Show night session mode settings with mode selection buttons."""
+        current_mode = dn_config.get_night_session_mode()
+        
+        text = (
+            "🌙 *Night Session Mode*\n\n"
+            f"*Current:* {dn_config.get_night_session_mode_short()}\n\n"
+            "*Available Modes:*\n\n"
+            "🌙❌ *OFF* — Night trading disabled.\n"
+            "└ Series freezes overnight. Safe option.\n\n"
+            "🌙🔵 *SOFT* — On session cap (max wins):\n"
+            "└ Reset only night\\_streak.\n"
+            "└ trade\\_level\\_streak continues!\n\n"
+            "🌙🔴 *HARD* — On session cap (max wins):\n"
+            "└ Reset ALL streaks + series.\n"
+            "└ Full reset, fresh start.\n\n"
+            "*Tip:* Switch near Day→Night boundary!\n"
+        )
+        
+        # Create mode selection buttons
+        buttons = []
+        for mode in NightSessionMode:
+            marker = " ✓" if mode == current_mode else ""
+            labels = {
+                NightSessionMode.OFF: "❌ OFF",
+                NightSessionMode.SOFT_RESET: "🔵 SOFT",
+                NightSessionMode.HARD_RESET: "🔴 HARD",
+            }
+            buttons.append(InlineKeyboardButton(
+                text=f"{labels[mode]}{marker}",
+                callback_data=f"settings_set_night_mode_{mode.value}"
+            ))
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            buttons,
+            [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
+        ])
+        
+        await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    async def _set_night_session_mode(
+        self,
+        callback: types.CallbackQuery,
+        dn_config,
+        mode_value: str,
+    ) -> None:
+        """Set night session mode."""
+        try:
+            mode = NightSessionMode(mode_value)
+            success = dn_config.set_night_session_mode(mode)
+            
+            if success:
+                mode_labels = {
+                    NightSessionMode.OFF: "❌ OFF",
+                    NightSessionMode.SOFT_RESET: "🔵 SOFT",
+                    NightSessionMode.HARD_RESET: "🔴 HARD",
+                }
+                await callback.answer(f"✅ Night Mode: {mode_labels[mode]}")
+                await self._show_night_mode_settings(callback, dn_config)
+            else:
+                await callback.answer("❌ Failed to set mode", show_alert=True)
+        except ValueError:
+            await callback.answer("❌ Invalid mode", show_alert=True)
     
     async def _show_quality_settings(self, callback: types.CallbackQuery, dn_config) -> None:
         """Show quality threshold info."""

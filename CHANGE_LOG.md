@@ -328,6 +328,64 @@ Each entry includes:
 
 ---
 
+## 2026-01-21: Night Session Mode (A/B/C) Toggles
+
+**Change**: Implemented user-controllable Night Session switch with three behaviors.
+
+**Details**:
+- Added `NightSessionMode` enum to `src/domain/enums.py`:
+  - `OFF`: Night autotrade disabled. Series freezes overnight.
+  - `SOFT_RESET`: On night session cap, reset only night_streak. trade_level_streak continues.
+  - `HARD_RESET`: On night session cap, reset both night_streak AND trade_level_streak.
+- Updated `src/services/day_night_config.py`:
+  - Added `get_night_session_mode()` / `set_night_session_mode()` methods
+  - Added `get_night_session_mode_description()` / `get_night_session_mode_short()` helpers
+  - Setting OFF automatically disables night_autotrade; SOFT/HARD enables it
+  - Mode persists to settings table
+- Updated `src/services/stats_service.py`:
+  - Changed from boolean `night_session_resets_trade_streak` to `NightSessionMode` enum
+  - `_apply_night_session_reset()` now checks mode for reset behavior
+  - Added `set_night_session_mode()` / `get_night_session_mode()` for runtime updates
+- Updated `src/adapters/telegram/bot.py`:
+  - Added Night Session Mode to `/status` display
+  - Added "🌙 Night Mode" button to `/settings` menu
+  - New `_show_night_mode_settings()`: Mode selection with description
+  - New `_set_night_session_mode()`: Handle mode change callbacks
+  - Mode buttons show current selection with ✓ marker
+- Created `src/tests/test_night_session_mode.py` (19 tests)
+
+**UI Presentation**:
+- /status shows: 🌙❌ OFF / 🌙🔵 SOFT / 🌙🔴 HARD
+- /settings menu has "🌙 Night Mode" button
+- Mode selection shows full description of each mode
+
+**Reset Behavior by Mode**:
+| Mode | On Night Session Cap | On Loss |
+|------|---------------------|---------|
+| OFF | N/A (no night trades) | Reset all |
+| SOFT | Reset night_streak only | Reset all |
+| HARD | Reset all streaks + series | Reset all |
+
+**Files Created**:
+- `src/tests/test_night_session_mode.py`
+
+**Files Modified**:
+- `src/domain/enums.py`
+- `src/services/day_night_config.py`
+- `src/services/stats_service.py`
+- `src/adapters/telegram/bot.py`
+- `CHANGE_LOG.md`
+- `CONFIG_CONTRACT.md`
+
+**Reason**: User request - Enable quick switching between night trading behaviors.
+
+**Behavior Changed**: Yes
+- Night session reset now respects NightSessionMode (SOFT vs HARD)
+- User can toggle mode via Telegram /settings → Night Mode
+- Mode persists and applies immediately
+
+---
+
 ## Template for Future Entries
 
 ```markdown
