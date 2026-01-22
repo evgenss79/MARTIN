@@ -75,19 +75,6 @@ UP signal:  low[i] <= ema20[i] AND close[i] > ema20[i] AND close[i+1] > ema20[i+
 DOWN signal: high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[i+1]
 ```
 
-**Data Sufficiency Guards** (NON-NEGOTIABLE):
-
-The TA Engine is responsible for validating historical depth before processing.
-
-| Guard | Threshold | Behavior |
-|-------|-----------|----------|
-| 1m candles for signal | `< 120` | Return None (no signal detection) |
-| 5m candles for quality | `< 60` | Force ADX=0, slope=0, trend_mult=1.0 |
-| idx5 for quality | `< 55` | Force ADX=0, slope=0, trend_mult=1.0 |
-
-These guards ensure deterministic behavior when insufficient data is available.
-No partial calculations or fallback logic is allowed.
-
 **Inputs**: Candle data, window start timestamp
 **Outputs**: `SignalResult` with direction, timestamp, quality breakdown
 

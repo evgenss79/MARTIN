@@ -15,49 +15,41 @@ Each entry includes:
 
 ---
 
-## 2026-01-22: Add Data Sufficiency Guards to TA Engine
+## 2026-01-22: Remove TA Data Sufficiency Guards
 
-**Change**: Implemented explicit data sufficiency guards to ensure deterministic behavior with insufficient historical data.
+**Change**: Removed the data sufficiency guards (120/60/idx5>=55) from TA Engine.
 
 **Details**:
 
-### 1m Candles Guard (Signal Detection)
-- If `len(candles_1m) < 120`: Return None immediately
-- No logging, no partial signal
-- This is a hard gate, not a fallback
+The guards that were added earlier have been removed per project owner decision.
+The TA strategy now runs without these artificial hard gates.
 
-### 5m Candles Guard (Quality Calculation)
-- If `len(candles_5m) < 60` OR `idx5 < 55`:
-  - Force `q_adx = 0.0`
-  - Force `q_slope = 0.0`  
-  - Force `trend_mult = 1.0`
-- No partial calculations allowed
-- Added `insufficient_5m_data` flag to QualityBreakdown
+### Removed Components
+- Removed `MIN_1M_CANDLES_FOR_SIGNAL = 120` constant and guard logic
+- Removed `MIN_5M_CANDLES_FOR_QUALITY = 60` constant and guard logic
+- Removed `MIN_IDX5_FOR_QUALITY = 55` constant and guard logic
+- Removed `insufficient_5m_data` field from QualityBreakdown
+- Removed `TestDataSufficiencyGuards` test class (8 tests)
 
-### Tests Added
-- 8 new tests in TestDataSufficiencyGuards class:
-  - test_no_signal_when_1m_candles_less_than_120
-  - test_no_signal_when_1m_candles_far_below_threshold
-  - test_signal_possible_when_1m_candles_at_120
-  - test_signal_possible_when_1m_candles_above_120
-  - test_quality_forced_zero_when_5m_candles_less_than_60
-  - test_quality_forced_zero_when_idx5_less_than_55
-  - test_quality_computed_when_guards_satisfied
-  - test_quality_constants_match_spec
+### Restored Behavior
+- Signal detection requires minimum 22 candles (20 for EMA + 2 for signal pattern)
+- Quality calculation proceeds with available data
+- No hard gates on historical depth
 
 ### Documentation Updated
-- CONFIG_CONTRACT.md: Added "Data Sufficiency Guards" section
-- ARCHITECTURE.md: Documented TA Engine responsibility for historical depth validation
-- QA_REPORT.md: Recorded new tests and regression prevention
+- CONFIG_CONTRACT.md: Removed "Data Sufficiency Guards" section
+- ARCHITECTURE.md: Removed guard documentation from TA Engine section
+- QA_REPORT.md: Updated test count (316 → 308)
+- CHANGE_LOG.md: This entry
 
-**Reason**: Ensure behavior under insufficient historical data is deterministic and documented, not accidental.
+**Reason**: Project owner decision to run TA strategy without artificial hard gates.
 
-**Behavior Changed**: No (behavioral guarding only, no strategy/formula changes)
+**Behavior Changed**: Yes (guards removed, strategy runs with available data)
 
 **Files Modified**:
-- `src/services/ta_engine.py`: Added guard constants and logic
-- `src/domain/models.py`: Added `insufficient_5m_data` field
-- `src/tests/test_ta_engine.py`: Added 8 new guard tests
+- `src/services/ta_engine.py`: Removed guard constants and logic
+- `src/domain/models.py`: Removed `insufficient_5m_data` field
+- `src/tests/test_ta_engine.py`: Removed TestDataSufficiencyGuards class
 - Documentation files updated
 
 ---

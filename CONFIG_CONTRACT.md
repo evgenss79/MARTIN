@@ -139,45 +139,6 @@ The quality formula uses FIXED constants as specified above.
 
 ---
 
-## Data Sufficiency Guards
-
-The TA Engine implements explicit data sufficiency guards to ensure deterministic behavior
-when insufficient historical data is available. These guards are NON-NEGOTIABLE.
-
-### 1-Minute Candles Guard (Signal Detection)
-
-| Condition | Behavior |
-|-----------|----------|
-| `len(candles_1m) < 120` | Return None immediately. No logging, no partial signal. |
-| `len(candles_1m) >= 120` | Proceed with normal signal detection. |
-
-**Threshold**: `MIN_1M_CANDLES_FOR_SIGNAL = 120`
-
-This is a **hard gate**, not a fallback. Signal detection is aborted completely
-when there is insufficient 1-minute candle data for reliable EMA20 calculation.
-
-### 5-Minute Candles Guard (Quality Calculation)
-
-| Condition | Behavior |
-|-----------|----------|
-| `len(candles_5m) < 60` | Force: q_adx=0.0, q_slope=0.0, trend_mult=1.0 |
-| `idx5 < 55` | Force: q_adx=0.0, q_slope=0.0, trend_mult=1.0 |
-| Otherwise | Compute ADX, EMA50 slope, trend confirmation normally |
-
-**Thresholds**:
-- `MIN_5M_CANDLES_FOR_QUALITY = 60`
-- `MIN_IDX5_FOR_QUALITY = 55`
-
-When guards trigger, the quality score uses only the anchor edge component:
-```
-quality = W_ANCHOR * edge_component * 1.0  (trend_mult = 1.0)
-```
-
-This ensures no partial calculations are performed with insufficient data.
-The `QualityBreakdown.insufficient_5m_data` flag is set to `True` when guards activate.
-
----
-
 ## Section: apis
 
 ### Gamma API
