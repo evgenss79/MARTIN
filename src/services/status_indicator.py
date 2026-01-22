@@ -56,6 +56,11 @@ class PolymarketAuthIndicator:
     emoji: str
     label: str
     
+    @property
+    def authorized(self) -> bool:
+        """Alias for is_authorized for backward compatibility."""
+        return self.is_authorized
+    
     def __str__(self) -> str:
         return f"{self.emoji} {self.label}"
 

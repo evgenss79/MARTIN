@@ -378,3 +378,48 @@ class TestAuthSectionVisibility:
         
         # Status should include auth indicator
         assert "auth_indicator" in source
+
+
+class TestAuthIndicatorCompatibility:
+    """Test that auth indicator has .authorized property for bot.py compatibility."""
+    
+    def test_auth_indicator_has_authorized_property(self):
+        """Test PolymarketAuthIndicator exposes .authorized property."""
+        from src.services.status_indicator import PolymarketAuthIndicator
+        
+        indicator = PolymarketAuthIndicator(
+            is_authorized=True,
+            emoji="🟡",
+            label="Test",
+        )
+        
+        # Both .authorized and .is_authorized should work
+        assert hasattr(indicator, 'authorized')
+        assert hasattr(indicator, 'is_authorized')
+        assert indicator.authorized == indicator.is_authorized
+    
+    def test_auth_indicator_authorized_false_case(self):
+        """Test PolymarketAuthIndicator .authorized property when not authorized."""
+        from src.services.status_indicator import PolymarketAuthIndicator
+        
+        indicator = PolymarketAuthIndicator(
+            is_authorized=False,
+            emoji="⚪",
+            label="Not Authorized",
+        )
+        
+        assert indicator.authorized is False
+        assert indicator.is_authorized is False
+    
+    def test_compute_polymarket_auth_indicator_returns_valid_object(self):
+        """Test that compute_polymarket_auth_indicator returns an object with .authorized."""
+        from src.services.status_indicator import compute_polymarket_auth_indicator
+        
+        # Paper mode
+        indicator = compute_polymarket_auth_indicator("paper")
+        assert hasattr(indicator, 'authorized')
+        assert indicator.authorized is False  # Paper mode is not authorized
+        
+        # Live mode without credentials (should not crash)
+        indicator_live = compute_polymarket_auth_indicator("live")
+        assert hasattr(indicator_live, 'authorized')

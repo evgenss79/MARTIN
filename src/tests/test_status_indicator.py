@@ -276,3 +276,25 @@ class TestIndicatorStringRepresentation:
         )
         
         assert str(indicator) == "🟡 Polymarket Authorized (Wallet)"
+    
+    def test_polymarket_indicator_authorized_property(self):
+        """PolymarketAuthIndicator should expose .authorized property for bot.py compatibility."""
+        # Test authorized case
+        indicator = PolymarketAuthIndicator(
+            is_authorized=True,
+            emoji="🟡",
+            label="Polymarket Authorized (Wallet)",
+        )
+        assert indicator.authorized is True
+        assert indicator.is_authorized is True
+        assert indicator.authorized == indicator.is_authorized
+        
+        # Test not authorized case
+        indicator_not_auth = PolymarketAuthIndicator(
+            is_authorized=False,
+            emoji="⚪",
+            label="Paper Mode",
+        )
+        assert indicator_not_auth.authorized is False
+        assert indicator_not_auth.is_authorized is False
+        assert indicator_not_auth.authorized == indicator_not_auth.is_authorized

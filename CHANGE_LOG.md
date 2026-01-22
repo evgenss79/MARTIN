@@ -15,6 +15,32 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Fix Telegram /start /status auth indicator crash
+
+**Change**: Fixed `AttributeError: 'PolymarketAuthIndicator' object has no attribute 'authorized'` crash.
+
+**Details**:
+- Added `@property authorized` to `PolymarketAuthIndicator` class in `src/services/status_indicator.py`
+  - This property returns `is_authorized`, providing backward compatibility
+- Added defensive fallback in `_build_auth_buttons_keyboard()` in `src/adapters/telegram/bot.py`
+  - Uses `getattr()` with fallback to handle missing attributes safely
+  - Wraps auth indicator access in try-except to prevent crashes
+- Added new tests:
+  - `test_polymarket_indicator_authorized_property` in `test_status_indicator.py`
+  - `TestAuthIndicatorCompatibility` class in `test_telegram_handlers.py` with 3 tests
+
+**Reason**: Runtime error in /start and /status commands due to attribute name mismatch (`authorized` vs `is_authorized`).
+
+**Behavior Changed**: No (bug fix only)
+
+**Files Modified**:
+- `src/services/status_indicator.py`: Added `@property authorized` to `PolymarketAuthIndicator`
+- `src/adapters/telegram/bot.py`: Added defensive fallback in `_build_auth_buttons_keyboard()`
+- `src/tests/test_status_indicator.py`: Added test for `.authorized` property
+- `src/tests/test_telegram_handlers.py`: Added `TestAuthIndicatorCompatibility` class
+
+---
+
 ## 2026-01-21: Initial Architecture Baseline
 
 **Change**: Complete implementation of MARTIN Telegram trading bot.

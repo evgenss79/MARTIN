@@ -1,9 +1,9 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T16:30:00Z  
-**Version**: 1.0.3 (Gamma Discovery Fix)  
-**Test Suite**: 267 tests passing
+**Last Updated**: 2026-01-22T17:45:00Z  
+**Version**: 1.0.4 (Auth Indicator Fix)  
+**Test Suite**: 276 tests passing
 
 ---
 
@@ -13,8 +13,8 @@ All production-like QA verification has been completed successfully. The MARTIN 
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 267 |
-| Unit Tests | 137 |
+| Total Tests | 276 |
+| Unit Tests | 140 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
 | Scheduler Tests | 10 |
@@ -22,9 +22,57 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | E2E Integration Night | 11 |
 | E2E Edge Cases | 14 |
 | Consolidated E2E | 9 |
-| Telegram Handler Tests | 27 |
-| Gamma Discovery Tests | 28 (NEW) |
+| Telegram Handler Tests | 30 |
+| Gamma Discovery Tests | 28 |
+| Status Indicator Tests | 16 |
 | All Passing | ✅ |
+
+---
+
+## 1.0 Auth Indicator Fix (2026-01-22) — HOTFIX
+
+### Issue Resolved
+
+**Problem**: `/start` and `/status` commands crash with:
+```
+AttributeError: 'PolymarketAuthIndicator' object has no attribute 'authorized'
+```
+
+**Root Cause**: The `PolymarketAuthIndicator` class in `src/services/status_indicator.py` uses `is_authorized` as the attribute name, but `bot.py` line 1126 in `_build_auth_buttons_keyboard()` was accessing `auth_indicator.authorized` (without the `is_` prefix).
+
+### Fixes Applied
+
+1. **Added `@property authorized`** to `PolymarketAuthIndicator` class
+   - Returns `is_authorized` for backward compatibility
+   - Both `.authorized` and `.is_authorized` now work
+
+2. **Added Defensive Fallback** in `_build_auth_buttons_keyboard()`
+   - Uses `getattr()` with fallback chain: `authorized` → `is_authorized` → `False`
+   - Wrapped in try-except to prevent crashes even with unexpected errors
+   - If status cannot be determined, treats as not authorized
+
+### Verification Steps
+
+```bash
+# Run specific tests
+python -m pytest src/tests/test_status_indicator.py::TestIndicatorStringRepresentation::test_polymarket_indicator_authorized_property -v
+python -m pytest src/tests/test_telegram_handlers.py::TestAuthIndicatorCompatibility -v
+
+# Run full test suite
+python -m pytest -q
+# Expected: 276 passed
+```
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/services/status_indicator.py` | Added `@property authorized` to `PolymarketAuthIndicator` |
+| `src/adapters/telegram/bot.py` | Added defensive fallback in `_build_auth_buttons_keyboard()` |
+| `src/tests/test_status_indicator.py` | Added test for `.authorized` property |
+| `src/tests/test_telegram_handlers.py` | Added `TestAuthIndicatorCompatibility` class (3 tests) |
+| `CHANGE_LOG.md` | Added fix entry |
+| `QA_REPORT.md` | Added this section |
 
 ---
 
