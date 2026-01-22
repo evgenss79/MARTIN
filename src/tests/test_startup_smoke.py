@@ -12,6 +12,7 @@ This test prevents regression of the issue:
 import os
 import sys
 import tempfile
+from pathlib import Path
 import pytest
 
 # Add src to path
@@ -219,6 +220,122 @@ class TestConfigNightSessionMode:
         
         # Should validate successfully with new key
         jsonschema.validate(config, schema)
+
+
+class TestBootstrapEnvLoading:
+    """Test bootstrap .env loading functionality."""
+    
+    def test_manual_env_parser_handles_key_value(self):
+        """Test manual .env parser handles KEY=value format."""
+        from pathlib import Path
+        from bootstrap import _load_env_file_manual
+        
+        test_file = Path(tempfile.mktemp(suffix='.env'))
+        try:
+            test_file.write_text("TEST_KEY_1=test_value_1\n")
+            
+            # Clear if exists
+            if 'TEST_KEY_1' in os.environ:
+                del os.environ['TEST_KEY_1']
+            
+            _load_env_file_manual(test_file)
+            
+            assert os.environ.get('TEST_KEY_1') == 'test_value_1'
+        finally:
+            test_file.unlink(missing_ok=True)
+            if 'TEST_KEY_1' in os.environ:
+                del os.environ['TEST_KEY_1']
+    
+    def test_manual_env_parser_handles_quoted_values(self):
+        """Test manual .env parser handles quoted values."""
+        from pathlib import Path
+        from bootstrap import _load_env_file_manual
+        
+        test_file = Path(tempfile.mktemp(suffix='.env'))
+        try:
+            test_file.write_text('TEST_KEY_2="double quoted value"\nTEST_KEY_3=\'single quoted\'\n')
+            
+            # Clear if exists
+            for k in ['TEST_KEY_2', 'TEST_KEY_3']:
+                if k in os.environ:
+                    del os.environ[k]
+            
+            _load_env_file_manual(test_file)
+            
+            assert os.environ.get('TEST_KEY_2') == 'double quoted value'
+            assert os.environ.get('TEST_KEY_3') == 'single quoted'
+        finally:
+            test_file.unlink(missing_ok=True)
+            for k in ['TEST_KEY_2', 'TEST_KEY_3']:
+                if k in os.environ:
+                    del os.environ[k]
+    
+    def test_manual_env_parser_skips_comments(self):
+        """Test manual .env parser skips comment lines."""
+        from pathlib import Path
+        from bootstrap import _load_env_file_manual
+        
+        test_file = Path(tempfile.mktemp(suffix='.env'))
+        try:
+            test_file.write_text("# This is a comment\nTEST_KEY_4=real_value\n# Another comment\n")
+            
+            if 'TEST_KEY_4' in os.environ:
+                del os.environ['TEST_KEY_4']
+            
+            _load_env_file_manual(test_file)
+            
+            assert os.environ.get('TEST_KEY_4') == 'real_value'
+        finally:
+            test_file.unlink(missing_ok=True)
+            if 'TEST_KEY_4' in os.environ:
+                del os.environ['TEST_KEY_4']
+    
+    def test_manual_env_parser_does_not_overwrite_existing(self):
+        """Test manual .env parser does not overwrite existing env vars."""
+        from pathlib import Path
+        from bootstrap import _load_env_file_manual
+        
+        test_file = Path(tempfile.mktemp(suffix='.env'))
+        try:
+            test_file.write_text("TEST_EXISTING=new_value\n")
+            
+            # Set existing value
+            os.environ['TEST_EXISTING'] = 'original_value'
+            
+            _load_env_file_manual(test_file)
+            
+            # Should keep original value
+            assert os.environ.get('TEST_EXISTING') == 'original_value'
+        finally:
+            test_file.unlink(missing_ok=True)
+            if 'TEST_EXISTING' in os.environ:
+                del os.environ['TEST_EXISTING']
+    
+    def test_load_environment_handles_missing_env_file(self):
+        """Test load_environment handles missing .env file gracefully."""
+        from bootstrap import load_environment
+        
+        # This should not raise an exception even without .env file
+        # (The function logs a message and continues)
+        try:
+            # Temporarily rename .env if it exists
+            import shutil
+            env_path = Path(__file__).parent.parent.parent / '.env'
+            backup_path = Path('/tmp/martin_env_backup')
+            
+            renamed = False
+            if env_path.exists():
+                shutil.move(str(env_path), str(backup_path))
+                renamed = True
+            
+            try:
+                # Should not raise
+                load_environment()
+            finally:
+                if renamed:
+                    shutil.move(str(backup_path), str(env_path))
+        except Exception as e:
+            pytest.fail(f"load_environment should handle missing .env gracefully: {e}")
 
 
 if __name__ == '__main__':
