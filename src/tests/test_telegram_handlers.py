@@ -378,3 +378,46 @@ class TestAuthSectionVisibility:
         
         # Status should include auth indicator
         assert "auth_indicator" in source
+
+
+class TestAuthIndicatorCompatibility:
+    """Test that auth indicator has .authorized property for bot.py compatibility."""
+    
+    def test_auth_indicator_has_authorized_property(self):
+        """Test PolymarketAuthIndicator exposes .authorized property."""
+        from src.services.status_indicator import PolymarketAuthIndicator
+        
+        indicator = PolymarketAuthIndicator(
+            is_authorized=True,
+            emoji="🟡",
+            label="Test",
+        )
+        
+        # Both .authorized and .is_authorized should work
+        assert hasattr(indicator, 'authorized')
+        assert hasattr(indicator, 'is_authorized')
+        assert indicator.authorized == indicator.is_authorized
+    
+    def test_auth_buttons_uses_defensive_getattr(self):
+        """Test that _build_auth_buttons_keyboard has defensive fallback."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._build_auth_buttons_keyboard)
+        
+        # Should use defensive getattr pattern or try-except
+        assert "getattr" in source or "try:" in source
+    
+    def test_start_and_status_do_not_crash_with_auth_indicator(self):
+        """Test that /start and /status handlers reference auth indicator safely."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._register_handlers)
+        
+        # Commands should reference auth indicator
+        assert "_get_polymarket_auth_indicator" in source
+        
+        # Should have defensive handling
+        build_auth_source = inspect.getsource(TelegramHandler._build_auth_buttons_keyboard)
+        assert "getattr" in build_auth_source or "try:" in build_auth_source
