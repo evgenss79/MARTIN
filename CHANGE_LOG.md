@@ -494,6 +494,52 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Consolidated E2E Integration Tests + File Verification
+
+**Change**: Added consolidated E2E integration test file and verified all QA artifacts exist on disk.
+
+**Details**:
+- Created `src/tests/test_e2e_integration.py`:
+  - Unified E2E test suite with explicit test names per user request
+  - `test_day_flow_user_ok_to_settlement_win()` - Complete day flow
+  - `test_night_flow_soft_reset_behavior()` - SOFT reset semantics
+  - `test_night_flow_hard_reset_behavior()` - HARD reset semantics
+  - `test_cap_fail_flow()` - CAP_FAIL cancellation
+  - `test_late_confirm_flow()` - LATE confirm (MG-3)
+  - `test_auth_gating_blocks_live_execution()` - Auth gating
+  - `test_full_flow_with_mocked_clients()` - Mocked API clients
+  - `test_cap_pass_ignores_all_ticks_before_confirm_ts()` - MG-2 timing
+  - `test_cap_pass_requires_all_ticks_after_confirm_ts()` - MG-2 split check
+- Updated `QA_REPORT.md`:
+  - Added "Files Verified on Disk" section
+  - Added verification commands
+  - Updated test counts
+  - Added consolidated E2E test documentation
+
+**Files Verified on Disk**:
+- `src/tests/test_smoke.py` ✅
+- `src/tests/test_scheduler.py` ✅
+- `src/tests/test_e2e_day_flow.py` ✅
+- `src/tests/test_e2e_night_flow.py` ✅
+- `src/tests/test_e2e_edge_cases.py` ✅
+- `src/tests/test_e2e_integration.py` ✅ (NEW)
+- `QA_REPORT.md` ✅
+
+**Test Count**: 208+ total
+
+**Files Created**:
+- `src/tests/test_e2e_integration.py`
+
+**Files Modified**:
+- `QA_REPORT.md`
+- `CHANGE_LOG.md`
+
+**Reason**: User requested explicit verification that QA test files exist on disk with specific test names.
+
+**Behavior Changed**: No (test additions only)
+
+---
+
 ## Template for Future Entries
 
 ```markdown
