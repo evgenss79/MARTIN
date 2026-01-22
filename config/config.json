@@ -8,32 +8,32 @@
   "trading": {
     "assets": ["BTC", "ETH"],
     "window_seconds": 3600,
-    "price_cap": 0.55,
-    "confirm_delay_seconds": 120,
-    "cap_min_ticks": 3
+    "price_cap": 0.48,
+    "confirm_delay_seconds": 150,
+    "cap_min_ticks": 1
   },
   "day_night": {
     "day_start_hour": 8,
     "day_end_hour": 22,
-    "base_day_min_quality": 50.0,
-    "base_night_min_quality": 60.0,
-    "switch_streak_at": 3,
-    "strict_day_q": "p95",
+    "base_day_min_quality": 35.0,
+    "base_night_min_quality": 38.0,
+    "switch_streak_at": 5,
+    "strict_day_q": "p90",
     "strict_night_q": "p95",
     "night_max_win_streak": 5,
-    "night_autotrade_enabled": false,
-    "night_session_mode": "HARD"
+    "night_autotrade_enabled": true,
+    "night_session_mode": "SOFT"
   },
   "ta": {
-    "warmup_seconds": 7200,
+    "warmup_seconds": 21600,
     "adx_period": 14,
-    "ema50_slope_bars": 5,
+    "ema50_slope_bars": 6,
     "anchor_scale": 10000.0,
-    "w_anchor": 0.3,
-    "w_adx": 0.4,
-    "w_slope": 0.3,
-    "trend_bonus": 1.2,
-    "trend_penalty": 0.8
+    "w_anchor": 1.0,
+    "w_adx": 0.2,
+    "w_slope": 0.2,
+    "trend_bonus": 1.1,
+    "trend_penalty": 0.7
   },
   "apis": {
     "gamma": {
@@ -66,11 +66,11 @@
   "risk": {
     "stake": {
       "mode": "fixed",
-      "base_amount_usdc": 10.0
+      "base_amount_usdc": 1.0
     }
   },
   "execution": {
-    "mode": "paper",
+    "mode": "live",
     "live": {
       "chain_id": 137,
       "order_timeout_seconds": 30,
