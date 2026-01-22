@@ -22,7 +22,7 @@
     "strict_night_q": "p95",
     "night_max_win_streak": 5,
     "night_autotrade_enabled": false,
-    "night_session_resets_trade_streak": true
+    "night_session_mode": "HARD"
   },
   "ta": {
     "warmup_seconds": 7200,

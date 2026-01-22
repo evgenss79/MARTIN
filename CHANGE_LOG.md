@@ -540,6 +540,49 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Fix StatsService Init Crash
+
+**Change**: Fixed startup crash caused by obsolete `night_session_resets_trade_streak` parameter.
+
+**Details**:
+- **Root Cause**: `orchestrator.py` was passing `night_session_resets_trade_streak=True` to `StatsService.__init__()`, but the signature was already refactored to use `night_session_mode: NightSessionMode` enum instead.
+- Updated `src/services/orchestrator.py`:
+  - Changed from passing obsolete boolean to new `night_session_mode` parameter
+  - Added conversion logic supporting both new canonical key and legacy boolean fallback
+  - Added import for `NightSessionMode` enum
+- Updated `src/services/day_end_reminder.py`:
+  - Updated `get_current_night_mode()` to use new `night_session_mode` config key
+  - Added legacy fallback for backward compatibility
+- Updated `config/config.json`:
+  - Replaced `night_session_resets_trade_streak: true` with `night_session_mode: "HARD"`
+- Updated `config/config.schema.json`:
+  - Replaced boolean property with enum: `["OFF", "SOFT", "HARD"]`
+- Added `src/tests/test_startup_smoke.py`:
+  - 7 new tests verifying StatsService init, config parsing, and conversion logic
+  - Regression tests ensuring obsolete parameter is rejected
+
+**Files Created**:
+- `src/tests/test_startup_smoke.py`
+
+**Files Modified**:
+- `src/services/orchestrator.py`
+- `src/services/day_end_reminder.py`
+- `config/config.json`
+- `config/config.schema.json`
+- `CHANGE_LOG.md`
+
+**Reason**: Fix critical startup crash per issue report:
+```
+TypeError: StatsService.__init__() got an unexpected keyword argument 'night_session_resets_trade_streak'
+```
+
+**Behavior Changed**: No (fix aligns code with documented NightSessionMode design)
+- `night_session_mode: "HARD"` is equivalent to old `night_session_resets_trade_streak: true`
+- `night_session_mode: "SOFT"` is equivalent to old `night_session_resets_trade_streak: false`
+- `night_session_mode: "OFF"` remains unchanged
+
+---
+
 ## Template for Future Entries
 
 ```markdown
@@ -559,4 +602,4 @@ Each entry includes:
 ---
 
 *This file is the authoritative change log for project MARTIN.*
-*Last updated: 2026-01-21*
+*Last updated: 2026-01-22*

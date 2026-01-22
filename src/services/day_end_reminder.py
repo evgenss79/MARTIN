@@ -104,12 +104,21 @@ class DayEndReminderService:
         if not night_autotrade:
             return NightSessionMode.OFF
         
-        # Check if trade streak resets on night session reset
-        # This is determined by config (default: HARD reset)
+        # Get night session mode from config
+        # Supports both new 'night_session_mode' key and legacy 'night_session_resets_trade_streak'
         from src.common.config import get_config
         config = get_config()
-        resets_trade_streak = config.day_night.get("night_session_resets_trade_streak", True)
+        night_mode_str = config.day_night.get("night_session_mode", None)
         
+        if night_mode_str is not None:
+            # Use new canonical key
+            try:
+                return NightSessionMode(night_mode_str)
+            except ValueError:
+                pass
+        
+        # Legacy fallback: convert boolean to enum
+        resets_trade_streak = config.day_night.get("night_session_resets_trade_streak", True)
         if resets_trade_streak:
             return NightSessionMode.HARD_RESET
         return NightSessionMode.SOFT_RESET

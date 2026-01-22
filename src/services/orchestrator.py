@@ -14,7 +14,7 @@ from src.common.exceptions import MartinError
 from src.domain.models import MarketWindow, Signal, Trade, Stats
 from src.domain.enums import (
     Direction, TradeStatus, CapStatus, Decision,
-    TimeMode, PolicyMode, FillStatus
+    TimeMode, PolicyMode, FillStatus, NightSessionMode
 )
 from src.adapters.storage import (
     get_database,
@@ -132,12 +132,24 @@ class Orchestrator:
         )
         
         rq_config = config.rolling_quantile
+        
+        # Convert night_session_mode config string to enum
+        # Supports both new 'night_session_mode' key and legacy 'night_session_resets_trade_streak'
+        night_mode_str = dn_config.get("night_session_mode", None)
+        if night_mode_str is not None:
+            # Use new canonical key
+            night_session_mode = NightSessionMode(night_mode_str)
+        else:
+            # Legacy fallback: convert boolean to enum
+            resets_trade_streak = dn_config.get("night_session_resets_trade_streak", True)
+            night_session_mode = NightSessionMode.HARD_RESET if resets_trade_streak else NightSessionMode.SOFT_RESET
+        
         self._stats_service = StatsService(
             stats_repo=self._stats_repo,
             trade_repo=self._trade_repo,
             switch_streak_at=dn_config.get("switch_streak_at", 3),
             night_max_win_streak=dn_config.get("night_max_win_streak", 5),
-            night_session_resets_trade_streak=dn_config.get("night_session_resets_trade_streak", True),
+            night_session_mode=night_session_mode,
             strict_day_q=dn_config.get("strict_day_q", "p95"),
             strict_night_q=dn_config.get("strict_night_q", "p95"),
             rolling_days=rq_config.get("rolling_days", 14),
