@@ -16,6 +16,7 @@ MARKET FILTERING RULES:
 """
 
 import asyncio
+import json
 import re
 from typing import Any
 from datetime import datetime, timezone
@@ -330,9 +331,11 @@ class GammaClient:
                 all_markets = []
                 page = 1
                 max_pages = 5  # Safety limit
+                last_page_market_count = 0  # Track last page results for pagination
                 
                 while page <= max_pages:
                     # Try with recurrence=hourly first, then without
+                    page_market_count = 0
                     for recurrence in ["hourly", None]:
                         try:
                             events, markets = await self.search_markets(
@@ -344,6 +347,7 @@ class GammaClient:
                             
                             all_events.extend(events)
                             all_markets.extend(markets)
+                            page_market_count = len(markets)
                             
                             # If we got results with recurrence filter, use them
                             if markets:
@@ -353,7 +357,8 @@ class GammaClient:
                             logger.warning("Gamma search failed", query=query, recurrence=recurrence, error=str(e))
                     
                     # Check if we need more pages
-                    if len(markets) < 100:
+                    last_page_market_count = page_market_count
+                    if last_page_market_count < 100:
                         break
                     page += 1
                 
@@ -604,17 +609,15 @@ class GammaClient:
         # Handle outcomes as string (JSON) or list
         if isinstance(outcomes, str):
             try:
-                import json
                 outcomes = json.loads(outcomes)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 outcomes = []
         
         # Handle clobTokenIds as string (JSON) or list
         if isinstance(clob_token_ids, str):
             try:
-                import json
                 clob_token_ids = json.loads(clob_token_ids)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 clob_token_ids = []
         
         for i, outcome in enumerate(outcomes):
