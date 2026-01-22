@@ -1028,23 +1028,22 @@ class TelegramHandler:
     
     async def _adjust_price_cap(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
         """Adjust price cap value."""
+        from src.services.day_night_config import MIN_PRICE_CAP, MAX_PRICE_CAP
         current = dn_config.get_price_cap()
         new_value = round(current + delta, 2)
-        # Validate range
-        if not 0.01 <= new_value <= 0.99:
-            await callback.answer(f"❌ Cap must be 0.01-0.99 (would be {new_value:.2f})", show_alert=True)
-            return
+        # Let service handle validation, but provide helpful error message
         success = dn_config.set_price_cap(new_value)
         if success:
             await callback.answer(f"✅ Price Cap: {new_value:.2f}")
             await self._show_trading_info(callback)
         else:
-            await callback.answer("❌ Invalid value", show_alert=True)
+            await callback.answer(f"❌ Cap must be {MIN_PRICE_CAP}-{MAX_PRICE_CAP}", show_alert=True)
     
     async def _adjust_confirm_delay(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
         """Adjust confirm delay in seconds."""
+        from src.services.day_night_config import MIN_CONFIRM_DELAY
         current = dn_config.get_confirm_delay()
-        new_value = max(0, current + delta)
+        new_value = max(MIN_CONFIRM_DELAY, current + delta)
         success = dn_config.set_confirm_delay(new_value)
         if success:
             await callback.answer(f"✅ Delay: {new_value}s")
@@ -1054,8 +1053,9 @@ class TelegramHandler:
     
     async def _adjust_cap_min_ticks(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
         """Adjust CAP minimum consecutive ticks."""
+        from src.services.day_night_config import MIN_CAP_TICKS
         current = dn_config.get_cap_min_ticks()
-        new_value = max(1, current + delta)
+        new_value = max(MIN_CAP_TICKS, current + delta)
         success = dn_config.set_cap_min_ticks(new_value)
         if success:
             await callback.answer(f"✅ Min Ticks: {new_value}")
@@ -1065,8 +1065,9 @@ class TelegramHandler:
     
     async def _adjust_base_stake(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
         """Adjust base stake amount."""
+        from src.services.day_night_config import MIN_BASE_STAKE
         current = dn_config.get_base_stake()
-        new_value = max(0.01, current + delta)
+        new_value = max(MIN_BASE_STAKE, current + delta)
         success = dn_config.set_base_stake(new_value)
         if success:
             await callback.answer(f"✅ Stake: ${new_value:.2f}")

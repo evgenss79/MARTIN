@@ -32,6 +32,15 @@ SETTING_CONFIRM_DELAY = "trading.confirm_delay_seconds"
 SETTING_CAP_MIN_TICKS = "trading.cap_min_ticks"
 SETTING_BASE_STAKE = "risk.stake.base_amount_usdc"
 
+# Validation constants (per spec)
+MIN_PRICE_CAP = 0.01
+MAX_PRICE_CAP = 0.99
+MIN_CAP_TICKS = 1
+MIN_BASE_STAKE = 0.01
+MIN_CONFIRM_DELAY = 0
+MIN_STREAK_THRESHOLD = 1
+MIN_QUALITY = 0.0
+
 
 class DayNightConfigService:
     """
@@ -551,12 +560,12 @@ class DayNightConfigService:
         Set maximum price for CAP_PASS validation.
         
         Args:
-            value: Price cap (0.01 to 0.99)
+            value: Price cap (MIN_PRICE_CAP to MAX_PRICE_CAP)
             
         Returns:
             True if successfully set
         """
-        if not 0.01 <= value <= 0.99:
+        if not MIN_PRICE_CAP <= value <= MAX_PRICE_CAP:
             logger.error("Invalid price cap value", value=value)
             return False
         
@@ -581,12 +590,12 @@ class DayNightConfigService:
         Set confirm delay in seconds.
         
         Args:
-            seconds: Delay in seconds (>= 0)
+            seconds: Delay in seconds (>= MIN_CONFIRM_DELAY)
             
         Returns:
             True if successfully set
         """
-        if seconds < 0:
+        if seconds < MIN_CONFIRM_DELAY:
             logger.error("Invalid confirm delay", seconds=seconds)
             return False
         
@@ -599,7 +608,7 @@ class DayNightConfigService:
         Get minimum consecutive ticks for CAP_PASS.
         
         Returns:
-            Minimum ticks (>= 1)
+            Minimum ticks (>= MIN_CAP_TICKS)
         """
         stored = self._get_setting(SETTING_CAP_MIN_TICKS)
         if stored is not None:
@@ -611,12 +620,12 @@ class DayNightConfigService:
         Set minimum consecutive ticks for CAP_PASS.
         
         Args:
-            ticks: Minimum ticks (>= 1)
+            ticks: Minimum ticks (>= MIN_CAP_TICKS)
             
         Returns:
             True if successfully set
         """
-        if ticks < 1:
+        if ticks < MIN_CAP_TICKS:
             logger.error("Invalid cap min ticks", ticks=ticks)
             return False
         
@@ -629,7 +638,7 @@ class DayNightConfigService:
         Get base stake amount in USDC.
         
         Returns:
-            Base stake amount (> 0)
+            Base stake amount (>= MIN_BASE_STAKE)
         """
         stored = self._get_setting(SETTING_BASE_STAKE)
         if stored is not None:
@@ -641,12 +650,12 @@ class DayNightConfigService:
         Set base stake amount in USDC.
         
         Args:
-            amount: Stake amount (> 0)
+            amount: Stake amount (>= MIN_BASE_STAKE)
             
         Returns:
             True if successfully set
         """
-        if amount <= 0:
+        if amount < MIN_BASE_STAKE:
             logger.error("Invalid base stake", amount=amount)
             return False
         
