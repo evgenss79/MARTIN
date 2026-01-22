@@ -280,9 +280,9 @@ MARTIN/
     │   ├── execution.py        # Order execution
     │   ├── secure_vault.py     # Encrypted credential storage
     │   ├── status_indicator.py # Status indicators
-    │   └── orchestrator.py     # Main coordinator
+    │   └── orchestrator.py     # Main coordinator (includes scheduling)
     ├── jobs/
-    │   └── scheduler.py        # Scheduled tasks
+    │   └── __init__.py         # Jobs module (scheduling via Orchestrator's async loop)
     └── tests/
         ├── test_cap_pass.py         # CAP_PASS tests
         ├── test_ta_engine.py        # TA engine tests
@@ -291,8 +291,29 @@ MARTIN/
         ├── test_crypto.py           # Encryption tests
         ├── test_secure_vault.py     # Vault tests
         ├── test_day_night_config.py # Day/Night config tests
-        └── test_day_end_reminder.py # Reminder tests
+        ├── test_day_end_reminder.py # Reminder tests
+        └── test_startup_smoke.py    # Startup smoke tests
 ```
+
+---
+
+## Scheduling Mechanism
+
+MARTIN uses a simple internal async loop for scheduling, managed by the Orchestrator:
+
+```python
+# In Orchestrator.start():
+while self._running:
+    await self._tick()
+    await asyncio.sleep(60)  # Check every minute
+```
+
+The `_tick()` method handles:
+- Market discovery via Gamma API
+- Active trade processing
+- Settlement checks
+
+This approach is simpler than external schedulers (like APScheduler) and is sufficient for MARTIN's needs since all tasks run on a fixed 60-second interval aligned with the hourly market windows.
 
 ---
 

@@ -1,9 +1,9 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T10:25:00Z  
+**Last Updated**: 2026-01-22T11:25:00Z  
 **Version**: 1.0.0 (Production-Ready)  
-**Test Suite**: 208+ tests passing
+**Test Suite**: 212 tests passing
 
 ---
 
@@ -13,9 +13,10 @@ All production-like QA verification has been completed successfully. The MARTIN 
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 208+ |
+| Total Tests | 212 |
 | Unit Tests | 137 |
 | Smoke Tests | 10 |
+| Startup Smoke Tests | 7 |
 | Scheduler Tests | 10 |
 | E2E Integration Day | 6 |
 | E2E Integration Night | 11 |
@@ -32,12 +33,36 @@ The following test files exist and are committed:
 | File | Location | Status |
 |------|----------|--------|
 | `test_smoke.py` | `src/tests/test_smoke.py` | ✅ EXISTS |
-| `test_scheduler.py` | `src/tests/test_scheduler.py` | ✅ EXISTS |
+| `test_startup_smoke.py` | `src/tests/test_startup_smoke.py` | ✅ EXISTS |
+| `test_scheduler.py` | `src/tests/test_scheduler.py` | ✅ EXISTS (Rewritten) |
 | `test_e2e_day_flow.py` | `src/tests/test_e2e_day_flow.py` | ✅ EXISTS |
 | `test_e2e_night_flow.py` | `src/tests/test_e2e_night_flow.py` | ✅ EXISTS |
 | `test_e2e_edge_cases.py` | `src/tests/test_e2e_edge_cases.py` | ✅ EXISTS |
 | `test_e2e_integration.py` | `src/tests/test_e2e_integration.py` | ✅ EXISTS |
 | `QA_REPORT.md` | Repository root | ✅ EXISTS |
+
+---
+
+## 1.2 Scheduler Tests Rewrite (2026-01-22)
+
+The scheduler tests were rewritten to match MARTIN's actual scheduling mechanism:
+
+**Previous State**:
+- Tests imported APScheduler library
+- APScheduler is NOT used in production code
+- Tests were testing a library that MARTIN doesn't use
+
+**Current State**:
+- Tests verify Orchestrator's internal async loop mechanism
+- Tests confirm `_tick`, `_discover_markets`, `_process_active_trades`, `_check_settlements` exist
+- Tests verify lifecycle methods (`start`, `stop`) work
+- Tests confirm jobs can be invoked with mocked dependencies
+- No external scheduler dependencies
+
+**MARTIN's Actual Scheduling**:
+- Orchestrator runs a main `async` loop
+- `_tick()` executes every 60 seconds via `asyncio.sleep(60)`
+- All scheduling is internal, no APScheduler required
 
 ---
 

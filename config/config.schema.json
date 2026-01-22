@@ -116,10 +116,11 @@
           "type": "boolean",
           "description": "Enable autonomous night trading"
         },
-        "night_session_resets_trade_streak": {
-          "type": "boolean",
-          "description": "Whether night session reset also resets trade_level_streak",
-          "default": true
+        "night_session_mode": {
+          "type": "string",
+          "enum": ["OFF", "SOFT", "HARD"],
+          "description": "Night session reset behavior: OFF (disabled), SOFT (reset night_streak only), HARD (reset all streaks)",
+          "default": "HARD"
         }
       }
     },
