@@ -47,14 +47,16 @@ MARTIN/
 └── README.md
 ```
 
-## Quick Start (For Non-Programmers)
+## Quick Start
 
 ### Prerequisites
 
 1. **Python 3.11 or higher** - Download from [python.org](https://www.python.org/downloads/)
 2. **A Telegram Bot Token** - Get one from [@BotFather](https://t.me/BotFather)
 
-### Step-by-Step Setup
+### One-Command Setup (Recommended)
+
+The easiest way to run MARTIN is with the automated bootstrap script:
 
 1. **Download the code**
    ```bash
@@ -62,15 +64,46 @@ MARTIN/
    cd MARTIN
    ```
 
-2. **Create a virtual environment** (recommended)
-   ```bash
-   python -m venv venv
+2. **Configure the bot**
    
-   # On Windows:
-   venv\Scripts\activate
+   Copy the example environment file and edit it:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Telegram bot token
+   ```
+
+3. **Run MARTIN**
+   ```bash
+   ./run.sh
+   ```
+
+That's it! The `run.sh` script automatically:
+- Creates a Python virtual environment (`.venv`) if it doesn't exist
+- Installs all dependencies from `requirements.txt`
+- Loads your `.env` file automatically
+- Starts MARTIN
+
+The script is **idempotent** - you can run it multiple times safely.
+
+### Manual Setup (Alternative)
+
+If you prefer manual setup:
+
+1. **Download the code**
+   ```bash
+   git clone https://github.com/yourusername/MARTIN.git
+   cd MARTIN
+   ```
+
+2. **Create a virtual environment**
+   ```bash
+   python3 -m venv .venv
    
    # On Mac/Linux:
-   source venv/bin/activate
+   source .venv/bin/activate
+   
+   # On Windows:
+   .venv\Scripts\activate
    ```
 
 3. **Install dependencies**
@@ -79,29 +112,29 @@ MARTIN/
    ```
 
 4. **Configure the bot**
-   
-   Copy the example environment file:
    ```bash
    cp .env.example .env
-   ```
-   
-   Edit `.env` with your settings:
-   ```
-   TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
+   # Edit .env with your settings
    ```
 
-5. **Review configuration** (optional)
-   
-   Edit `config/config.json` to customize:
-   - Trading assets (BTC, ETH)
-   - Day/Night hours
-   - Quality thresholds
-   - Night auto-trading
-   
-6. **Run the bot**
+5. **Run the bot**
    ```bash
    python -m src.main
    ```
+
+### Environment Variables
+
+MARTIN automatically loads environment variables from the `.env` file in the project root. This is handled by the application itself - no need for manual `source` commands.
+
+**Required:**
+- `TELEGRAM_BOT_TOKEN` - Your Telegram bot token from @BotFather
+
+**Optional:**
+- `EXECUTION_MODE` - `paper` (default) or `live`
+- `LOG_LEVEL` - `DEBUG`, `INFO` (default), `WARNING`, `ERROR`
+- `MASTER_ENCRYPTION_KEY` - For encrypting secrets at rest (recommended for live trading)
+
+See `.env.example` for all available options.
 
 ### Using Docker (Alternative)
 

@@ -780,6 +780,49 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 
 ---
 
+## 2026-01-22: Automated Bootstrap (One-Command Startup)
+
+**Change**: Implemented automated bootstrap with `run.sh` script and robust .env loading.
+
+**Details**:
+- Created `run.sh` script for one-command startup:
+  - Creates `.venv` virtual environment if missing
+  - Installs dependencies from `requirements.txt` (idempotent with hash checking)
+  - Checks for `.env` file and provides guidance if missing
+  - Creates `data/` directory if needed
+  - Runs MARTIN via `python -m src.main`
+  - Fully idempotent - safe to run multiple times
+- Updated `src/bootstrap.py`:
+  - Made `load_environment()` robust against missing python-dotenv
+  - Added manual .env parser as fallback
+  - Never logs secret values
+  - Import moved inside function to avoid startup failures
+- Created `.env.example`:
+  - Template file documenting all environment variables
+  - No real secrets (placeholder values only)
+- Updated `README.md`:
+  - Documented `./run.sh` as primary startup method
+  - Explained automatic .env loading
+  - Updated Quick Start section for one-command experience
+
+**Files Created**:
+- `run.sh` - One-command bootstrap script
+- `.env.example` - Environment template
+
+**Files Modified**:
+- `src/bootstrap.py` - Robust .env loading
+- `README.md` - Updated Quick Start documentation
+- `CHANGE_LOG.md` - This entry
+
+**Reason**: Project required manual steps for startup which violated UX requirements. Now `./run.sh` provides zero-manual-step launch.
+
+**Behavior Changed**: Yes
+- Startup no longer requires manual `source .venv/bin/activate` or `set -a; source .env`
+- `.env` is loaded automatically by the application
+- Missing python-dotenv no longer crashes startup (graceful fallback)
+
+---
+
 ## Template for Future Entries
 
 ```markdown
