@@ -88,28 +88,54 @@ Priority: Runtime > Environment > Config file
 | Key | Type | Default | Range | Description |
 |-----|------|---------|-------|-------------|
 | `ta.warmup_seconds` | int | 7200 | ≥ 0 | Historical data for indicator warmup |
-| `ta.adx_period` | int | 14 | ≥ 1 | ADX calculation period (IGNORED - uses canonical 14) |
-| `ta.ema50_slope_bars` | int | 5 | ≥ 1 | Bars for EMA50 slope (IGNORED - uses canonical 6) |
-| `ta.anchor_scale` | float | 10000.0 | > 0 | Scale factor for anchor edge (IGNORED - uses canonical 10000.0) |
-| `ta.w_anchor` | float | 0.3 | 0–1 | Weight for anchor component (IGNORED - uses canonical 1.0) |
-| `ta.w_adx` | float | 0.4 | 0–1 | Weight for ADX component (IGNORED - uses canonical 0.2) |
-| `ta.w_slope` | float | 0.3 | 0–1 | Weight for slope component (IGNORED - uses canonical 0.2) |
-| `ta.trend_bonus` | float | 1.2 | ≥ 1 | Multiplier when trend confirms (IGNORED - uses canonical 1.10) |
-| `ta.trend_penalty` | float | 0.8 | 0–1 | Multiplier when trend opposes (IGNORED - uses canonical 0.70) |
+| `ta.adx_period` | int | 14 | ≥ 1 | ADX calculation period (IGNORED - uses fixed 14) |
+| `ta.ema50_slope_bars` | int | 5 | ≥ 1 | Bars for EMA50 slope (IGNORED - uses fixed 6) |
+| `ta.anchor_scale` | float | 10000.0 | > 0 | Scale factor for anchor edge (IGNORED - uses fixed 10000.0) |
+| `ta.w_anchor` | float | 0.3 | 0–1 | Weight for anchor component (IGNORED - uses fixed 1.0) |
+| `ta.w_adx` | float | 0.4 | 0–1 | Weight for ADX component (IGNORED - uses fixed 0.2) |
+| `ta.w_slope` | float | 0.3 | 0–1 | Weight for slope component (IGNORED - uses fixed 0.2) |
+| `ta.trend_bonus` | float | 1.2 | ≥ 1 | Multiplier when trend confirms (IGNORED - uses fixed 1.10) |
+| `ta.trend_penalty` | float | 0.8 | 0–1 | Multiplier when trend opposes (IGNORED - uses fixed 0.70) |
 
-**CANONICAL Quality Formula (FIXED - config values are IGNORED)**:
+**SPEC Quality Formula (FIXED - config values are IGNORED)**:
 ```
-quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier
+quality = (W_ANCHOR*edge_component + W_ADX*q_adx + W_SLOPE*q_slope) * trend_mult
 
-Where:
-- anchor_component = |close - anchor| / anchor * ANCHOR_SCALE (10000.0)
-- adx_component = ADX(14) / 100 (normalized to [0..1])
-- slope_component = EMA50 slope over 6 bars (normalized to [0..1])
-- trend_multiplier = 1.10 (confirm) | 0.70 (oppose) | 1.00 (else)
+Constants (FIXED, not configurable):
+- ANCHOR_SCALE = 10000.0
+- W_ANCHOR = 1.0
+- W_ADX = 0.2
+- W_SLOPE = 0.2
+- ADX_PERIOD = 14
+- EMA50_SLOPE_BARS = 6
+- TREND_BONUS = 1.10
+- TREND_PENALTY = 0.70
+
+Components (all use 5m candles except anchor):
+C1) edge_component = abs(ret_from_anchor) * ANCHOR_SCALE
+    - Penalty: *= 0.25 if direction inconsistent with return
+C2) q_adx = adx_5m[idx5] (raw ADX value, NOT normalized)
+C3) q_slope = 1000 * abs(slope50 / close_5m[idx5])
+C4) trend_mult = TREND_BONUS if close_5m confirms direction, else TREND_PENALTY
+```
+
+**Signal Detection (SPEC)**:
+```
+UP signal at index i:
+- low_1m[i] <= ema20_1m[i]  (touch from below)
+- close_1m[i] > ema20_1m[i] (close above)
+- close_1m[i+1] > ema20_1m[i+1] (confirm)
+signal_ts = ts_1m[i+1], signal_price = close_1m[i+1]
+
+DOWN signal at index i:
+- high_1m[i] >= ema20_1m[i] (touch from above)
+- close_1m[i] < ema20_1m[i] (close below)
+- close_1m[i+1] < ema20_1m[i+1] (confirm)
+signal_ts = ts_1m[i+1], signal_price = close_1m[i+1]
 ```
 
 **Note**: The TA config values are retained for backward compatibility but are IGNORED. 
-The quality formula uses CANONICAL fixed constants as specified above.
+The quality formula uses FIXED constants as specified above.
 
 ---
 

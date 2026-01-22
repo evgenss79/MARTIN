@@ -1,19 +1,19 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T20:30:00Z  
-**Version**: 1.1.0 (Canonical Strategy Alignment)  
-**Test Suite**: 305 tests passing
+**Last Updated**: 2026-01-22T21:00:00Z  
+**Version**: 1.2.0 (Spec-Aligned Signal Detection & Quality)  
+**Test Suite**: 308 tests passing
 
 ---
 
 ## 1. Executive Summary
 
-All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, and **CANONICAL trading strategy specification implementation**.
+All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, and **SPEC-aligned signal detection and quality calculation**.
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 305 |
+| Total Tests | 308 |
 | Unit Tests | 140 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -25,37 +25,49 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | Telegram Handler Tests | 30 |
 | Gamma Discovery Tests | 28 |
 | Status Indicator Tests | 16 |
-| **Canonical Strategy Tests** | **27** |
-| TA Engine Tests | 17 |
+| **Canonical Strategy Tests** | **28** |
+| TA Engine Tests | 19 |
 | All Passing | ✅ |
 
 ---
 
-## 0. Canonical Strategy Alignment (2026-01-22) — MAJOR
+## 0. Spec-Aligned Signal Detection & Quality (2026-01-22) — CORRECTION
 
 ### Changes Applied
 
-Aligned live bot signal logic with CANONICAL trading strategy specification.
+Corrected signal detection and quality calculation to match the EXACT written specification.
 
 **Key Principle**: "Only signals passing quality threshold are visible to the user."
 
-### Signal Detection (CANONICAL)
+### Signal Detection (SPEC - Touch + 2-Bar Confirm)
 
-- EMA20 on 1m with crossover detection
-- UP signal: Close[bar-1] > EMA20, Close[bar-2] > EMA20, Previous bar was below EMA20
-- DOWN signal: Close[bar-1] < EMA20, Close[bar-2] < EMA20, Previous bar was above EMA20
-- Signal evaluated ONLY at candle close
+- **NOT crossover logic** — uses touch + confirm
+- UP signal at index i:
+  - `low_1m[i] <= ema20_1m[i]` (touch from below)
+  - `close_1m[i] > ema20_1m[i]` (close above)
+  - `close_1m[i+1] > ema20_1m[i+1]` (confirm)
+- DOWN signal at index i:
+  - `high_1m[i] >= ema20_1m[i]` (touch from above)
+  - `close_1m[i] < ema20_1m[i]` (close below)
+  - `close_1m[i+1] < ema20_1m[i+1]` (confirm)
+- Signal ts = ts[i+1], signal price = close[i+1]
 
-### Quality Formula (CANONICAL FIXED)
+### Quality Formula (SPEC FIXED)
 
 ```
-quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier
+quality = (W_ANCHOR*edge_component + W_ADX*q_adx + W_SLOPE*q_slope) * trend_mult
 
-Where:
-- anchor_component: |close - anchor| / anchor * ANCHOR_SCALE (10000.0)
-- adx_component: ADX(14) on 1m normalized to [0..1]
-- slope_component: EMA50 slope over 6 bars on 1m normalized to [0..1]
-- trend_multiplier: 1.10 (confirm) | 0.70 (oppose) | 1.00 (else)
+Constants (FIXED):
+- ANCHOR_SCALE = 10000.0
+- W_ANCHOR = 1.0, W_ADX = 0.2, W_SLOPE = 0.2
+- TREND_BONUS = 1.10, TREND_PENALTY = 0.70
+
+Components (use 5m candles):
+C1) edge_component = abs(ret_from_anchor) * ANCHOR_SCALE
+    - Penalty: *= 0.25 if direction inconsistent with return
+C2) q_adx = adx_5m[idx5] (RAW value, NOT normalized)
+C3) q_slope = 1000 * abs(slope50 / close_5m[idx5])
+C4) trend_mult based on EMA20 on 5m
 ```
 
 ### Quality Threshold (ONLY FILTER)

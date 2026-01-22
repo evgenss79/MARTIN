@@ -15,39 +15,58 @@ Each entry includes:
 
 ---
 
-## 2026-01-22: Align Live Bot Signal Logic with Canonical Strategy Specification
+## 2026-01-22: Fix Signal Detection and Quality Calculation to Match Written Spec
 
-**Change**: Updated TA Engine and quality calculation to match CANONICAL trading strategy specification exactly.
+**Change**: Corrected TA Engine to match the EXACT written specification (touch + 2-bar confirm, not crossover).
 
 **Details**:
 
-### Signal Detection (Part A)
-- Updated signal detection to use canonical crossover logic:
-  - UP signal: Close[bar-1] > EMA20, Close[bar-2] > EMA20, Previous bar was below EMA20
-  - DOWN signal: Close[bar-1] < EMA20, Close[bar-2] < EMA20, Previous bar was above EMA20
-- Signal evaluated ONLY at candle close
-- Removed old low/high touch detection logic
+### Signal Detection (Corrected)
+- Fixed signal detection to use touch+confirm logic (as originally written):
+  - UP signal at index i: `low[i] <= ema20[i] AND close[i] > ema20[i] AND close[i+1] > ema20[i+1]`
+  - DOWN signal at index i: `high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[i+1]`
+- Signal ts = ts[i+1], signal price = close[i+1]
 
-### Quality Calculation (Part B)
-- Implemented CANONICAL quality formula with FIXED weights:
-  - `quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier`
-- Components:
-  - anchor_component: distance from EMA20 scaled by ANCHOR_SCALE = 10000.0
-  - adx_component: ADX(14) on 1m normalized to [0..1]
-  - slope_component: EMA50 slope over last 6 bars on 1m normalized to [0..1]
-- Trend multiplier: 1.10 (confirm), 0.70 (oppose), 1.00 (else)
-- Removed configurable weights - now uses class constants
+### Quality Calculation (Corrected)
+- ADX and EMA50 slope now use **5m candles** (not 1m)
+- ADX is **raw value** (not normalized to [0..1])
+- Slope uses formula: `q_slope = 1000 * abs(slope50 / close_5m[idx5])`
+- **Penalty restored**: edge_component *= 0.25 if direction inconsistent with return
+- FIXED weights: W_ANCHOR=1.0, W_ADX=0.2, W_SLOPE=0.2
+- FIXED trend multipliers: 1.10 (confirm), 0.70 (oppose)
 
-### Quality Threshold (Part C)
-- Quality is the ONLY filter for trade eligibility
-- No additional filters (RSI, VWAP, volume, volatility)
+### Tests (Updated)
+- Updated test_ta_engine.py for:
+  - Touch+confirm signal detection
+  - Penalty application (0.25 cases)
+  - ADX raw value (not normalized)
+  - Slope 1000x formula
+  - 5m candles for ADX/slope
+- Updated test_canonical_strategy.py to match written spec
 
-### Telegram Signal Delivery (Part D)
-- Telegram signal card sent ONLY IF quality passes threshold
-- No "skipped" cards, no debug info for failed quality signals
-- "Signals that do not pass quality do not exist" (from user perspective)
+**Reason**: Previous implementation incorrectly used crossover logic and normalized ADX/slope. Corrected to match the exact written specification.
 
-### Config Defaults (Part G)
+**Behavior Changed**: Yes
+- Signal detection now requires low/high touch (not just close crossover)
+- Quality components use 5m candles (not 1m)
+- ADX/slope are raw values (not normalized)
+
+**Files Modified**:
+- `src/services/ta_engine.py`: Fixed signal detection and quality calculation
+- `src/services/orchestrator.py`: Removed candles_1m from quality call
+- `src/tests/test_ta_engine.py`: Updated tests for correct spec
+- `src/tests/test_canonical_strategy.py`: Updated tests for correct spec
+- `CHANGE_LOG.md`: This entry
+- `CONFIG_CONTRACT.md`: Updated documentation
+- `QA_REPORT.md`: Updated test count
+
+---
+
+## 2026-01-22: Align Live Bot Signal Logic with Canonical Strategy Specification (REVERTED)
+
+**Note**: This entry documents an incorrect implementation that was later corrected.
+
+**Change**: Updated TA Engine and quality calculation (incorrectly used crossover logic).
 - Updated config.json defaults:
   - base_day_min_quality: 35.0
   - base_night_min_quality: 35.0
