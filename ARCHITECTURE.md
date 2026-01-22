@@ -239,12 +239,21 @@ User OK → ExecutionService.place_order() →
 - Settings editable via interactive inline keyboard menus
 - Changes persisted to SQLite `settings` table via `SettingsRepository`
 - Priority: Database settings > Environment > config.json
-- Currently editable: day hours, night mode, reminder minutes
-- Future: quality thresholds, streak settings, trading params
+- Editable via +/- buttons:
+  - Day/Night hours (hour grid 0-23)
+  - Quality thresholds (base_day_min_quality, base_night_min_quality)
+  - Streak settings (switch_streak_at, night_max_win_streak)
+  - Trading params (price_cap, confirm_delay_seconds, cap_min_ticks, base_stake)
+  - Night session mode (OFF/SOFT/HARD)
+  - Reminder minutes
+
+**Unknown Command Handler**:
+- BotFather placeholder commands (/command1..8) return helpful error
+- Lists available commands: /start, /status, /settings, etc.
 
 **Auth Buttons**:
 - `/start` and `/status` show authorization status and action buttons
-- Paper mode: informational button only
+- Paper mode: informational "Paper Mode Active" button (always visible)
 - Live mode: Authorize, Recheck, Logout buttons
 
 **Critical Rule**: No business logic in handlers. Handlers call services.

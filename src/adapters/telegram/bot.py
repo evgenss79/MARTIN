@@ -222,6 +222,24 @@ class TelegramHandler:
             
             await self._show_report(message)
         
+        # Handler for unknown commands like /command1, /command2, etc.
+        @self._dp.message(Command(commands=["command1", "command2", "command3", "command4", "command5", "command6", "command7", "command8"]))
+        async def cmd_unknown_botfather(message: types.Message):
+            """Handle BotFather placeholder commands that do nothing."""
+            logger.info("Unknown command", command=message.text, user_id=message.from_user.id)
+            await message.answer(
+                "❓ *Unknown Command*\n\n"
+                "This command is not recognized.\n\n"
+                "*Available commands:*\n"
+                "/start - Show welcome and help\n"
+                "/status - Current stats and mode\n"
+                "/settings - View/edit configuration\n"
+                "/pause - Pause trading\n"
+                "/resume - Resume trading\n"
+                "/report - Performance report\n",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        
         @self._dp.callback_query()
         async def handle_callback(callback: types.CallbackQuery):
             # CRITICAL: Answer callback IMMEDIATELY to prevent timeout
@@ -514,6 +532,10 @@ class TelegramHandler:
             default_night_max_streak=config.day_night.get("night_max_win_streak", 5),
             default_switch_streak_at=config.day_night.get("switch_streak_at", 3),
             default_reminder_minutes=config.day_night.get("reminder_minutes_before_day_end", 30),
+            default_price_cap=config.trading.get("price_cap", 0.55),
+            default_confirm_delay=config.trading.get("confirm_delay_seconds", 120),
+            default_cap_min_ticks=config.trading.get("cap_min_ticks", 3),
+            default_base_stake=config.risk.get("stake", {}).get("base_amount_usdc", 10.0),
         )
     
     async def _show_settings_menu(self, message: types.Message) -> None:
@@ -534,6 +556,12 @@ class TelegramHandler:
         switch_at = dn_config.get_switch_streak_at()
         reminder_mins = dn_config.get_reminder_minutes()
         
+        # Get persisted trading values (DB overrides > config defaults)
+        price_cap = dn_config.get_price_cap()
+        confirm_delay = dn_config.get_confirm_delay()
+        cap_min_ticks = dn_config.get_cap_min_ticks()
+        base_stake = dn_config.get_base_stake()
+        
         # Current mode
         current_mode = dn_config.get_current_mode()
         mode_emoji = "☀️" if current_mode.value == "DAY" else "🌙"
@@ -549,16 +577,16 @@ class TelegramHandler:
             f"└ Base Night: {base_night_q:.1f}\n\n"
             f"*Night Session Mode:*\n"
             f"└ {night_mode_short}\n\n"
-            f"*Night Settings:*\n"
-            f"└ Max Streak: {night_max}\n\n"
             f"*Streak Settings:*\n"
-            f"└ Switch to STRICT at: {switch_at} wins\n\n"
+            f"├ Switch to STRICT at: {switch_at} wins\n"
+            f"└ Night Max Streak: {night_max}\n\n"
             f"*Reminders:*\n"
             f"└ Before day end: {reminder_mins} min {'(Disabled)' if reminder_mins == 0 else ''}\n\n"
             f"*Trading:*\n"
-            f"├ Price Cap: {config.trading.get('price_cap', 0.55)}\n"
-            f"├ Confirm Delay: {config.trading.get('confirm_delay_seconds', 120)}s\n"
-            f"└ CAP Min Ticks: {config.trading.get('cap_min_ticks', 3)}\n"
+            f"├ Price Cap: {price_cap:.2f}\n"
+            f"├ Confirm Delay: {confirm_delay}s\n"
+            f"├ CAP Min Ticks: {cap_min_ticks}\n"
+            f"└ Base Stake: ${base_stake:.2f} USDC\n"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -615,6 +643,33 @@ class TelegramHandler:
             await self._set_night_session_mode(callback, dn_config, mode)
         elif setting_name == "toggle_night_auto":
             await self._toggle_night_auto(callback, dn_config)
+        # Quality threshold adjustments
+        elif setting_name.startswith("quality_day_"):
+            delta = float(setting_name.replace("quality_day_", ""))
+            await self._adjust_quality_day(callback, dn_config, delta)
+        elif setting_name.startswith("quality_night_"):
+            delta = float(setting_name.replace("quality_night_", ""))
+            await self._adjust_quality_night(callback, dn_config, delta)
+        # Streak adjustments
+        elif setting_name.startswith("streak_switch_"):
+            delta = int(setting_name.replace("streak_switch_", ""))
+            await self._adjust_switch_streak(callback, dn_config, delta)
+        elif setting_name.startswith("streak_nightmax_"):
+            delta = int(setting_name.replace("streak_nightmax_", ""))
+            await self._adjust_night_max_streak(callback, dn_config, delta)
+        # Trading adjustments
+        elif setting_name.startswith("trading_cap_"):
+            delta = float(setting_name.replace("trading_cap_", ""))
+            await self._adjust_price_cap(callback, dn_config, delta)
+        elif setting_name.startswith("trading_delay_"):
+            delta = int(setting_name.replace("trading_delay_", ""))
+            await self._adjust_confirm_delay(callback, dn_config, delta)
+        elif setting_name.startswith("trading_ticks_"):
+            delta = int(setting_name.replace("trading_ticks_", ""))
+            await self._adjust_cap_min_ticks(callback, dn_config, delta)
+        elif setting_name.startswith("trading_stake_"):
+            delta = float(setting_name.replace("trading_stake_", ""))
+            await self._adjust_base_stake(callback, dn_config, delta)
         else:
             await callback.message.answer(
                 f"Setting '{setting_name}' edit not yet implemented.\n"
@@ -760,50 +815,67 @@ class TelegramHandler:
             await callback.answer("❌ Invalid mode", show_alert=True)
     
     async def _show_quality_settings(self, callback: types.CallbackQuery, dn_config) -> None:
-        """Show quality threshold info."""
+        """Show quality threshold settings with edit buttons."""
         base_day = dn_config.get_base_day_quality()
         base_night = dn_config.get_base_night_quality()
         
         text = (
             "📊 *Quality Thresholds*\n\n"
-            f"Base Day: {base_day:.1f}\n"
-            f"Base Night: {base_night:.1f}\n\n"
-            "*Note:* Quality threshold changes require config edit.\n"
-            "Edit `config/config.json`:\n"
-            "```\n"
-            '"day_night": {\n'
-            f'  "base_day_min_quality": {base_day},\n'
-            f'  "base_night_min_quality": {base_night}\n'
-            '}\n'
-            "```"
+            f"*Base Day Quality:* {base_day:.1f}\n"
+            f"*Base Night Quality:* {base_night:.1f}\n\n"
+            "Adjust thresholds using buttons below.\n"
+            "Higher values = stricter filtering.\n"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            # Day quality controls
+            [InlineKeyboardButton(text=f"─── Day: {base_day:.1f} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-10", callback_data="settings_quality_day_-10"),
+                InlineKeyboardButton(text="-5", callback_data="settings_quality_day_-5"),
+                InlineKeyboardButton(text="+5", callback_data="settings_quality_day_+5"),
+                InlineKeyboardButton(text="+10", callback_data="settings_quality_day_+10"),
+            ],
+            # Night quality controls
+            [InlineKeyboardButton(text=f"─── Night: {base_night:.1f} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-10", callback_data="settings_quality_night_-10"),
+                InlineKeyboardButton(text="-5", callback_data="settings_quality_night_-5"),
+                InlineKeyboardButton(text="+5", callback_data="settings_quality_night_+5"),
+                InlineKeyboardButton(text="+10", callback_data="settings_quality_night_+10"),
+            ],
             [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
         ])
         
         await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
     
     async def _show_streak_settings(self, callback: types.CallbackQuery, dn_config) -> None:
-        """Show streak settings info."""
+        """Show streak settings with edit buttons."""
         switch_at = dn_config.get_switch_streak_at()
         night_max = dn_config.get_night_max_streak()
         
         text = (
             "🔥 *Streak Settings*\n\n"
-            f"Switch to STRICT at: {switch_at} wins\n"
-            f"Night Max Streak: {night_max}\n\n"
-            "*Note:* Streak setting changes require config edit.\n"
-            "Edit `config/config.json`:\n"
-            "```\n"
-            '"day_night": {\n'
-            f'  "switch_streak_at": {switch_at},\n'
-            f'  "night_max_win_streak": {night_max}\n'
-            '}\n'
-            "```"
+            f"*Switch to STRICT at:* {switch_at} wins\n"
+            f"*Night Max Streak:* {night_max}\n\n"
+            "Adjust streak thresholds using buttons below.\n"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            # Switch streak controls
+            [InlineKeyboardButton(text=f"─── STRICT at: {switch_at} wins ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-1", callback_data="settings_streak_switch_-1"),
+                InlineKeyboardButton(text="+1", callback_data="settings_streak_switch_+1"),
+                InlineKeyboardButton(text="+2", callback_data="settings_streak_switch_+2"),
+            ],
+            # Night max streak controls
+            [InlineKeyboardButton(text=f"─── Night Max: {night_max} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-1", callback_data="settings_streak_nightmax_-1"),
+                InlineKeyboardButton(text="+1", callback_data="settings_streak_nightmax_+1"),
+                InlineKeyboardButton(text="+2", callback_data="settings_streak_nightmax_+2"),
+            ],
             [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
         ])
         
@@ -851,31 +923,157 @@ class TelegramHandler:
             await callback.answer("❌ Invalid value", show_alert=True)
     
     async def _show_trading_info(self, callback: types.CallbackQuery) -> None:
-        """Show trading settings info."""
-        from src.common.config import get_config
-        config = get_config()
+        """Show trading settings with edit buttons."""
+        dn_config = self._get_day_night_config_service()
+        
+        # Get persisted values (DB overrides > config defaults)
+        price_cap = dn_config.get_price_cap()
+        confirm_delay = dn_config.get_confirm_delay()
+        cap_min_ticks = dn_config.get_cap_min_ticks()
+        base_stake = dn_config.get_base_stake()
         
         text = (
             "💰 *Trading Settings*\n\n"
-            f"Price Cap: {config.trading.get('price_cap', 0.55)}\n"
-            f"Confirm Delay: {config.trading.get('confirm_delay_seconds', 120)}s\n"
-            f"CAP Min Ticks: {config.trading.get('cap_min_ticks', 3)}\n\n"
-            "*Note:* Trading parameter changes require config edit.\n"
-            "Edit `config/config.json`:\n"
-            "```\n"
-            '"trading": {\n'
-            f'  "price_cap": {config.trading.get("price_cap", 0.55)},\n'
-            f'  "confirm_delay_seconds": {config.trading.get("confirm_delay_seconds", 120)},\n'
-            f'  "cap_min_ticks": {config.trading.get("cap_min_ticks", 3)}\n'
-            '}\n'
-            "```"
+            f"*Price Cap:* {price_cap:.2f}\n"
+            f"*Confirm Delay:* {confirm_delay}s\n"
+            f"*CAP Min Ticks:* {cap_min_ticks}\n"
+            f"*Base Stake:* ${base_stake:.2f} USDC\n\n"
+            "Adjust values using buttons below.\n"
         )
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            # Price cap controls
+            [InlineKeyboardButton(text=f"─── Price Cap: {price_cap:.2f} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-0.05", callback_data="settings_trading_cap_-0.05"),
+                InlineKeyboardButton(text="-0.01", callback_data="settings_trading_cap_-0.01"),
+                InlineKeyboardButton(text="+0.01", callback_data="settings_trading_cap_+0.01"),
+                InlineKeyboardButton(text="+0.05", callback_data="settings_trading_cap_+0.05"),
+            ],
+            # Confirm delay controls
+            [InlineKeyboardButton(text=f"─── Delay: {confirm_delay}s ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-30s", callback_data="settings_trading_delay_-30"),
+                InlineKeyboardButton(text="-10s", callback_data="settings_trading_delay_-10"),
+                InlineKeyboardButton(text="+10s", callback_data="settings_trading_delay_+10"),
+                InlineKeyboardButton(text="+30s", callback_data="settings_trading_delay_+30"),
+            ],
+            # CAP min ticks controls
+            [InlineKeyboardButton(text=f"─── Min Ticks: {cap_min_ticks} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-1", callback_data="settings_trading_ticks_-1"),
+                InlineKeyboardButton(text="+1", callback_data="settings_trading_ticks_+1"),
+                InlineKeyboardButton(text="+2", callback_data="settings_trading_ticks_+2"),
+            ],
+            # Base stake controls
+            [InlineKeyboardButton(text=f"─── Stake: ${base_stake:.2f} ───", callback_data="noop")],
+            [
+                InlineKeyboardButton(text="-$5", callback_data="settings_trading_stake_-5"),
+                InlineKeyboardButton(text="-$1", callback_data="settings_trading_stake_-1"),
+                InlineKeyboardButton(text="+$1", callback_data="settings_trading_stake_+1"),
+                InlineKeyboardButton(text="+$5", callback_data="settings_trading_stake_+5"),
+            ],
             [InlineKeyboardButton(text="⬅️ Back", callback_data="settings_menu")],
         ])
         
         await callback.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+    
+    # ============================================
+    # Settings Adjustment Methods
+    # ============================================
+    
+    async def _adjust_quality_day(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
+        """Adjust base day quality threshold."""
+        current = dn_config.get_base_day_quality()
+        new_value = max(0, current + delta)
+        success = dn_config.set_base_day_quality(new_value)
+        if success:
+            await callback.answer(f"✅ Day Quality: {new_value:.1f}")
+            await self._show_quality_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_quality_night(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
+        """Adjust base night quality threshold."""
+        current = dn_config.get_base_night_quality()
+        new_value = max(0, current + delta)
+        success = dn_config.set_base_night_quality(new_value)
+        if success:
+            await callback.answer(f"✅ Night Quality: {new_value:.1f}")
+            await self._show_quality_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_switch_streak(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
+        """Adjust switch to STRICT streak threshold."""
+        current = dn_config.get_switch_streak_at()
+        new_value = max(1, current + delta)
+        success = dn_config.set_switch_streak_at(new_value)
+        if success:
+            await callback.answer(f"✅ STRICT at: {new_value} wins")
+            await self._show_streak_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_night_max_streak(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
+        """Adjust night max win streak."""
+        current = dn_config.get_night_max_streak()
+        new_value = max(1, current + delta)
+        success = dn_config.set_night_max_streak(new_value)
+        if success:
+            await callback.answer(f"✅ Night Max: {new_value}")
+            await self._show_streak_settings(callback, dn_config)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_price_cap(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
+        """Adjust price cap value."""
+        from src.services.day_night_config import MIN_PRICE_CAP, MAX_PRICE_CAP
+        current = dn_config.get_price_cap()
+        new_value = round(current + delta, 2)
+        # Let service handle validation, but provide helpful error message
+        success = dn_config.set_price_cap(new_value)
+        if success:
+            await callback.answer(f"✅ Price Cap: {new_value:.2f}")
+            await self._show_trading_info(callback)
+        else:
+            await callback.answer(f"❌ Cap must be {MIN_PRICE_CAP}-{MAX_PRICE_CAP}", show_alert=True)
+    
+    async def _adjust_confirm_delay(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
+        """Adjust confirm delay in seconds."""
+        from src.services.day_night_config import MIN_CONFIRM_DELAY
+        current = dn_config.get_confirm_delay()
+        new_value = max(MIN_CONFIRM_DELAY, current + delta)
+        success = dn_config.set_confirm_delay(new_value)
+        if success:
+            await callback.answer(f"✅ Delay: {new_value}s")
+            await self._show_trading_info(callback)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_cap_min_ticks(self, callback: types.CallbackQuery, dn_config, delta: int) -> None:
+        """Adjust CAP minimum consecutive ticks."""
+        from src.services.day_night_config import MIN_CAP_TICKS
+        current = dn_config.get_cap_min_ticks()
+        new_value = max(MIN_CAP_TICKS, current + delta)
+        success = dn_config.set_cap_min_ticks(new_value)
+        if success:
+            await callback.answer(f"✅ Min Ticks: {new_value}")
+            await self._show_trading_info(callback)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
+    
+    async def _adjust_base_stake(self, callback: types.CallbackQuery, dn_config, delta: float) -> None:
+        """Adjust base stake amount."""
+        from src.services.day_night_config import MIN_BASE_STAKE
+        current = dn_config.get_base_stake()
+        new_value = max(MIN_BASE_STAKE, current + delta)
+        success = dn_config.set_base_stake(new_value)
+        if success:
+            await callback.answer(f"✅ Stake: ${new_value:.2f}")
+            await self._show_trading_info(callback)
+        else:
+            await callback.answer("❌ Invalid value", show_alert=True)
     
     async def _show_report(self, message: types.Message) -> None:
         """Show performance report."""
