@@ -224,6 +224,29 @@ User OK → ExecutionService.place_order() →
 - Settings menu for runtime config changes
 - Rate-limited message sending
 
+**Routing Architecture**:
+- Uses aiogram `Dispatcher` with command and callback handlers
+- Commands registered via `@self._dp.message(Command("command_name"))`
+- Callbacks registered via `@self._dp.callback_query()`
+- All handlers check authorization before processing
+
+**Callback Timeout Prevention**:
+- CRITICAL: `await callback.answer()` MUST be called FIRST in callback handlers
+- This prevents "query is too old and response timeout expired" errors
+- Slow work (DB queries, API calls) happens AFTER answering
+
+**Settings Persistence**:
+- Settings editable via interactive inline keyboard menus
+- Changes persisted to SQLite `settings` table via `SettingsRepository`
+- Priority: Database settings > Environment > config.json
+- Currently editable: day hours, night mode, reminder minutes
+- Future: quality thresholds, streak settings, trading params
+
+**Auth Buttons**:
+- `/start` and `/status` show authorization status and action buttons
+- Paper mode: informational button only
+- Live mode: Authorize, Recheck, Logout buttons
+
 **Critical Rule**: No business logic in handlers. Handlers call services.
 
 ---

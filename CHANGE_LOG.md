@@ -613,6 +613,66 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 
 ---
 
+## 2026-01-22: Telegram UX Operationalization + Callback Timeout Fix + Gamma Search Fix
+
+**Change**: Fixed multiple runtime issues in Telegram bot including callback timeouts, Gamma market discovery, and added auth buttons.
+
+**Details**:
+- **Callback Timeout Bug Fix** (`src/adapters/telegram/bot.py`):
+  - Moved `await callback.answer()` to FIRST LINE of callback handler
+  - This prevents "TelegramBadRequest: query is too old and response timeout expired"
+  - Added try/except wrapper for callback processing
+  - Added logging for all callbacks and commands
+
+- **Gamma Market Discovery Fix** (`src/adapters/polymarket/gamma_client.py`):
+  - Removed "hourly" from query string (was: `"{asset} up or down hourly"`)
+  - Now uses: `"{asset} up or down"` with `recurrence=hourly` as separate parameter
+  - Added fallback query strategy (Bitcoin/Ethereum as alternatives to BTC/ETH)
+  - Added debug logging for top search results
+  - Added warning when no markets discovered
+
+- **Polymarket Auth Buttons** (`src/adapters/telegram/bot.py`):
+  - Added `_build_auth_buttons_keyboard()` method
+  - Added `_handle_auth_callback()` method
+  - `/start` and `/status` now show auth buttons:
+    - Paper mode: "📝 Paper Mode Active" (informational)
+    - Live mode: "🔐 Authorize Polymarket", "✅ Recheck Authorization", "🚪 Log out"
+  - Auth status displayed in /start command
+
+- **Handler Logging**:
+  - All command handlers now log their invocation with user_id
+  - Callbacks log the callback_data being processed
+  - Unhandled callbacks are logged as warnings
+
+- **New Tests** (`src/tests/test_telegram_handlers.py`):
+  - `test_start_status_handlers_registered()`
+  - `test_settings_menu_renders_human_text()`
+  - `test_callback_answer_called_immediately()`
+  - `test_gamma_query_strings_do_not_include_hourly()`
+  - 14 new tests total
+
+**Files Modified**:
+- `src/adapters/telegram/bot.py` - Callback fix, auth buttons, logging
+- `src/adapters/polymarket/gamma_client.py` - Query fix, fallbacks, logging
+
+**Files Created**:
+- `src/tests/test_telegram_handlers.py` - 14 new tests
+
+**Reason**: Runtime issues reported:
+- "TelegramBadRequest: query is too old and response timeout expired"
+- Gamma returning 0 markets due to "hourly" in query string
+- No auth buttons visible in Telegram UI
+
+**Behavior Changed**: Yes
+- Callback handlers now answer immediately (no timeout)
+- Gamma search uses correct query format (better market discovery)
+- Auth buttons visible on /start and /status
+- All handlers log their activity
+
+**Test Results**: 226 tests pass (0 failures)
+
+---
+
 ## Template for Future Entries
 
 ```markdown

@@ -74,12 +74,17 @@ class TelegramHandler:
         
         @self._dp.message(Command("start"))
         async def cmd_start(message: types.Message):
+            logger.info("Command /start", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
-            await message.answer(
+            # Get auth indicator for display
+            auth_indicator = self._get_polymarket_auth_indicator()
+            
+            text = (
                 "🤖 *MARTIN Trading Bot*\n\n"
                 "I help you trade Polymarket hourly BTC/ETH markets.\n\n"
+                f"*Auth Status:* {auth_indicator}\n\n"
                 "Commands:\n"
                 "/status - Current status and stats\n"
                 "/settings - View/edit settings\n"
@@ -87,12 +92,21 @@ class TelegramHandler:
                 "/resume - Resume trading\n"
                 "/dayonly - Enable day-only mode\n"
                 "/nightonly - Enable night-only mode\n"
-                "/report - Performance report\n",
+                "/report - Performance report\n"
+            )
+            
+            # Build keyboard with auth buttons
+            keyboard = self._build_auth_buttons_keyboard()
+            
+            await message.answer(
+                text,
                 parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
             )
         
         @self._dp.message(Command("status"))
         async def cmd_status(message: types.Message):
+            logger.info("Command /status", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -139,10 +153,14 @@ class TelegramHandler:
                 f"└ Reminder: {reminder_mins}min {'(Disabled)' if reminder_mins == 0 else ''}\n"
             )
             
-            await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+            # Build keyboard with auth buttons
+            keyboard = self._build_auth_buttons_keyboard()
+            
+            await message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
         
         @self._dp.message(Command("pause"))
         async def cmd_pause(message: types.Message):
+            logger.info("Command /pause", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -151,6 +169,7 @@ class TelegramHandler:
         
         @self._dp.message(Command("resume"))
         async def cmd_resume(message: types.Message):
+            logger.info("Command /resume", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -159,6 +178,7 @@ class TelegramHandler:
         
         @self._dp.message(Command("dayonly"))
         async def cmd_dayonly(message: types.Message):
+            logger.info("Command /dayonly", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -173,6 +193,7 @@ class TelegramHandler:
         
         @self._dp.message(Command("nightonly"))
         async def cmd_nightonly(message: types.Message):
+            logger.info("Command /nightonly", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -187,6 +208,7 @@ class TelegramHandler:
         
         @self._dp.message(Command("settings"))
         async def cmd_settings(message: types.Message):
+            logger.info("Command /settings", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -194,6 +216,7 @@ class TelegramHandler:
         
         @self._dp.message(Command("report"))
         async def cmd_report(message: types.Message):
+            logger.info("Command /report", user_id=message.from_user.id)
             if not self._is_authorized(message.from_user.id):
                 return
             
@@ -201,40 +224,50 @@ class TelegramHandler:
         
         @self._dp.callback_query()
         async def handle_callback(callback: types.CallbackQuery):
+            # CRITICAL: Answer callback IMMEDIATELY to prevent timeout
+            # (TelegramBadRequest: query is too old and response timeout expired)
+            await callback.answer()
+            
             if not self._is_authorized(callback.from_user.id):
-                await callback.answer("Unauthorized", show_alert=True)
                 return
             
             data = callback.data
+            logger.debug("Callback received", callback_data=data, user_id=callback.from_user.id)
             
             if data == "noop":
                 # No-operation callback (for separator buttons)
-                await callback.answer()
                 return
             
-            if data.startswith("trade_ok_"):
-                trade_id = int(data.split("_")[2])
-                await self._handle_trade_confirm(callback, trade_id, True)
-            
-            elif data.startswith("trade_skip_"):
-                trade_id = int(data.split("_")[2])
-                await self._handle_trade_confirm(callback, trade_id, False)
-            
-            elif data.startswith("trade_details_"):
-                trade_id = int(data.split("_")[2])
-                await self._handle_trade_details(callback, trade_id)
-            
-            elif data == "settings_menu":
-                await self._show_settings_menu(callback.message)
-            
-            elif data == "toggle_night_auto":
-                dn_config = self._get_day_night_config_service()
-                await self._toggle_night_auto(callback, dn_config)
-            
-            elif data.startswith("settings_"):
-                await self._handle_settings_callback(callback, data)
-            
-            await callback.answer()
+            try:
+                if data.startswith("trade_ok_"):
+                    trade_id = int(data.split("_")[2])
+                    await self._handle_trade_confirm(callback, trade_id, True)
+                
+                elif data.startswith("trade_skip_"):
+                    trade_id = int(data.split("_")[2])
+                    await self._handle_trade_confirm(callback, trade_id, False)
+                
+                elif data.startswith("trade_details_"):
+                    trade_id = int(data.split("_")[2])
+                    await self._handle_trade_details(callback, trade_id)
+                
+                elif data == "settings_menu":
+                    await self._show_settings_menu(callback.message)
+                
+                elif data == "toggle_night_auto":
+                    dn_config = self._get_day_night_config_service()
+                    await self._toggle_night_auto(callback, dn_config)
+                
+                elif data.startswith("settings_"):
+                    await self._handle_settings_callback(callback, data)
+                
+                elif data.startswith("auth_"):
+                    await self._handle_auth_callback(callback, data)
+                
+                else:
+                    logger.warning("Unhandled callback", callback_data=data)
+            except Exception as e:
+                logger.error("Callback handler error", callback_data=data, error=str(e))
     
     def _is_authorized(self, user_id: int) -> bool:
         """Check if user is authorized."""
@@ -867,3 +900,147 @@ class TelegramHandler:
             text += f"Night Strict Threshold: {stats.last_strict_night_threshold:.2f}\n"
         
         await message.answer(text, parse_mode=ParseMode.MARKDOWN)
+    
+    def _build_auth_buttons_keyboard(self) -> InlineKeyboardMarkup:
+        """
+        Build inline keyboard with Polymarket authorization buttons.
+        
+        Returns:
+            InlineKeyboardMarkup with auth-related buttons
+        """
+        from src.common.config import get_config
+        config = get_config()
+        execution_mode = config.execution.get("mode", "paper")
+        
+        buttons = []
+        
+        if execution_mode == "paper":
+            # Paper mode - show info button
+            buttons.append([
+                InlineKeyboardButton(
+                    text="📝 Paper Mode Active",
+                    callback_data="auth_info"
+                )
+            ])
+        else:
+            # Live mode - check auth status
+            auth_indicator = self._get_polymarket_auth_indicator()
+            is_authorized = auth_indicator.authorized
+            
+            if is_authorized:
+                buttons.append([
+                    InlineKeyboardButton(
+                        text="✅ Polymarket Authorized",
+                        callback_data="auth_recheck"
+                    )
+                ])
+                buttons.append([
+                    InlineKeyboardButton(
+                        text="🚪 Log out / Switch Wallet",
+                        callback_data="auth_logout"
+                    )
+                ])
+            else:
+                buttons.append([
+                    InlineKeyboardButton(
+                        text="🔐 Authorize Polymarket",
+                        callback_data="auth_authorize"
+                    )
+                ])
+                buttons.append([
+                    InlineKeyboardButton(
+                        text="✅ Recheck Authorization",
+                        callback_data="auth_recheck"
+                    )
+                ])
+        
+        # Add settings button
+        buttons.append([
+            InlineKeyboardButton(text="⚙️ Settings", callback_data="settings_menu")
+        ])
+        
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    async def _handle_auth_callback(
+        self,
+        callback: types.CallbackQuery,
+        data: str,
+    ) -> None:
+        """Handle authorization-related callbacks."""
+        action = data.replace("auth_", "")
+        logger.info("Auth callback", action=action, user_id=callback.from_user.id)
+        
+        from src.common.config import get_config
+        config = get_config()
+        execution_mode = config.execution.get("mode", "paper")
+        
+        if action == "info":
+            # Paper mode info
+            text = (
+                "📝 *Paper Mode*\n\n"
+                "Live trading is disabled.\n"
+                "All trades are simulated.\n\n"
+                "To enable live trading:\n"
+                "1. Set `execution.mode` to `live` in config\n"
+                "2. Configure wallet or API credentials\n"
+                "3. Restart the bot"
+            )
+            await callback.message.answer(text, parse_mode=ParseMode.MARKDOWN)
+        
+        elif action == "authorize":
+            # Start authorization flow
+            if execution_mode == "paper":
+                await callback.message.answer(
+                    "⚠️ Paper mode active. Switch to live mode first."
+                )
+                return
+            
+            text = (
+                "🔐 *Polymarket Authorization*\n\n"
+                "To authorize, configure one of:\n\n"
+                "*Option 1: Wallet*\n"
+                "Set `POLYMARKET_PRIVATE_KEY` environment variable\n\n"
+                "*Option 2: API Key*\n"
+                "Set all three:\n"
+                "• `POLYMARKET_API_KEY`\n"
+                "• `POLYMARKET_API_SECRET`\n"
+                "• `POLYMARKET_PASSPHRASE`\n\n"
+                "Then restart the bot."
+            )
+            await callback.message.answer(text, parse_mode=ParseMode.MARKDOWN)
+        
+        elif action == "recheck":
+            # Recheck auth status
+            auth_indicator = self._get_polymarket_auth_indicator()
+            await callback.message.answer(
+                f"🔄 Auth Status: {auth_indicator}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        
+        elif action == "logout":
+            # Logout / clear session
+            if execution_mode == "paper":
+                await callback.message.answer(
+                    "⚠️ Paper mode active. No session to clear."
+                )
+                return
+            
+            # Clear any cached session
+            try:
+                from src.services.secure_vault import SecureVault
+                vault = SecureVault()
+                if vault.has_active_session():
+                    vault.clear_session()
+                    await callback.message.answer(
+                        "🚪 Session cleared. You will need to re-authorize."
+                    )
+                else:
+                    await callback.message.answer(
+                        "ℹ️ No active session to clear.\n"
+                        "To switch wallets, update your environment variables and restart."
+                    )
+            except Exception as e:
+                logger.error("Logout error", error=str(e))
+                await callback.message.answer(
+                    "ℹ️ To switch wallets, update your environment variables and restart."
+                )
