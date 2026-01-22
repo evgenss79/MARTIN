@@ -227,13 +227,12 @@ class TestBootstrapEnvLoading:
     
     def test_manual_env_parser_handles_key_value(self):
         """Test manual .env parser handles KEY=value format."""
-        from pathlib import Path
         from bootstrap import _load_env_file_manual
         
-        test_file = Path(tempfile.mktemp(suffix='.env'))
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
+            f.write("TEST_KEY_1=test_value_1\n")
+            test_file = Path(f.name)
         try:
-            test_file.write_text("TEST_KEY_1=test_value_1\n")
-            
             # Clear if exists
             if 'TEST_KEY_1' in os.environ:
                 del os.environ['TEST_KEY_1']
@@ -248,13 +247,12 @@ class TestBootstrapEnvLoading:
     
     def test_manual_env_parser_handles_quoted_values(self):
         """Test manual .env parser handles quoted values."""
-        from pathlib import Path
         from bootstrap import _load_env_file_manual
         
-        test_file = Path(tempfile.mktemp(suffix='.env'))
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
+            f.write('TEST_KEY_2="double quoted value"\nTEST_KEY_3=\'single quoted\'\n')
+            test_file = Path(f.name)
         try:
-            test_file.write_text('TEST_KEY_2="double quoted value"\nTEST_KEY_3=\'single quoted\'\n')
-            
             # Clear if exists
             for k in ['TEST_KEY_2', 'TEST_KEY_3']:
                 if k in os.environ:
@@ -272,13 +270,12 @@ class TestBootstrapEnvLoading:
     
     def test_manual_env_parser_skips_comments(self):
         """Test manual .env parser skips comment lines."""
-        from pathlib import Path
         from bootstrap import _load_env_file_manual
         
-        test_file = Path(tempfile.mktemp(suffix='.env'))
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
+            f.write("# This is a comment\nTEST_KEY_4=real_value\n# Another comment\n")
+            test_file = Path(f.name)
         try:
-            test_file.write_text("# This is a comment\nTEST_KEY_4=real_value\n# Another comment\n")
-            
             if 'TEST_KEY_4' in os.environ:
                 del os.environ['TEST_KEY_4']
             
@@ -292,13 +289,12 @@ class TestBootstrapEnvLoading:
     
     def test_manual_env_parser_does_not_overwrite_existing(self):
         """Test manual .env parser does not overwrite existing env vars."""
-        from pathlib import Path
         from bootstrap import _load_env_file_manual
         
-        test_file = Path(tempfile.mktemp(suffix='.env'))
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as f:
+            f.write("TEST_EXISTING=new_value\n")
+            test_file = Path(f.name)
         try:
-            test_file.write_text("TEST_EXISTING=new_value\n")
-            
             # Set existing value
             os.environ['TEST_EXISTING'] = 'original_value'
             
@@ -321,7 +317,7 @@ class TestBootstrapEnvLoading:
             # Temporarily rename .env if it exists
             import shutil
             env_path = Path(__file__).parent.parent.parent / '.env'
-            backup_path = Path('/tmp/martin_env_backup')
+            backup_path = Path(tempfile.gettempdir()) / 'martin_env_backup'
             
             renamed = False
             if env_path.exists():

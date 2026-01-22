@@ -814,7 +814,7 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 - `README.md` - Updated Quick Start documentation
 - `CHANGE_LOG.md` - This entry
 
-**Reason**: Project required ручных (manual) steps for startup which violated UX requirements. Now `./run.sh` provides zero-manual-step launch.
+**Reason**: Project required manual steps for startup which violated UX requirements. Now `./run.sh` provides zero-manual-step launch.
 
 **Behavior Changed**: Yes
 - Startup no longer requires manual `source .venv/bin/activate` or `set -a; source .env`

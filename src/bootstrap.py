@@ -56,6 +56,9 @@ def _load_env_file_manual(env_file: Path) -> None:
     """
     Manually load a .env file without python-dotenv.
     
+    This is a simple fallback parser used only when python-dotenv is not installed.
+    For production use, python-dotenv should be installed for full .env support.
+    
     Simple parser that handles:
     - KEY=value
     - KEY="quoted value"
@@ -63,9 +66,10 @@ def _load_env_file_manual(env_file: Path) -> None:
     - # comments
     - Empty lines
     
-    Does NOT handle:
+    Does NOT handle (install python-dotenv for full support):
     - Multiline values
     - Variable expansion
+    - Escaped quotes within values
     """
     with open(env_file, "r", encoding="utf-8") as f:
         for line in f:
@@ -78,7 +82,7 @@ def _load_env_file_manual(env_file: Path) -> None:
                 key, _, value = line.partition("=")
                 key = key.strip()
                 value = value.strip()
-                # Remove surrounding quotes if present
+                # Remove surrounding quotes if present (simple handling)
                 if (value.startswith('"') and value.endswith('"')) or \
                    (value.startswith("'") and value.endswith("'")):
                     value = value[1:-1]
