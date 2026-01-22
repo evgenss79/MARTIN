@@ -1,9 +1,9 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T11:42:00Z  
-**Version**: 1.0.1 (Telegram UX Fix)  
-**Test Suite**: 226 tests passing
+**Last Updated**: 2026-01-22T14:35:00Z  
+**Version**: 1.0.2 (Telegram Settings + Commands Fix)  
+**Test Suite**: 239+ tests passing
 
 ---
 
@@ -13,7 +13,7 @@ All production-like QA verification has been completed successfully. The MARTIN 
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 226 |
+| Total Tests | 239+ |
 | Unit Tests | 137 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -22,7 +22,7 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | E2E Integration Night | 11 |
 | E2E Edge Cases | 14 |
 | Consolidated E2E | 9 |
-| Telegram Handler Tests | 14 |
+| Telegram Handler Tests | 27 (was 14) |
 | All Passing | ✅ |
 
 ---
@@ -105,6 +105,34 @@ The scheduler tests were rewritten to match MARTIN's actual scheduling mechanism
 - Orchestrator runs a main `async` loop
 - `_tick()` executes every 60 seconds via `asyncio.sleep(60)`
 - All scheduling is internal, no APScheduler required
+
+---
+
+## 1.4 Telegram UX Fixes (2026-01-22 - Update 2)
+
+### Issues Fixed (This Update)
+
+1. **Unknown Commands Handler**
+   - Problem: `/command1` through `/command8` do nothing (BotFather placeholders)
+   - Fix: Added handler that returns helpful error message with available commands
+
+2. **Settings Now Editable in Telegram**
+   - Problem: Quality, streak, trading settings said "edit config.json"
+   - Fix: Added +/- inline buttons for all key parameters
+   - Editable: price_cap, confirm_delay, cap_min_ticks, base_stake, qualities, streaks
+
+3. **Auth Section Always Visible**
+   - Problem: Auth buttons not visible in paper mode
+   - Fix: Paper mode now shows "📝 Paper Mode Active" informational button
+
+### New Tests Added
+
+| Test Class | Tests | Description |
+|------------|-------|-------------|
+| TestUnknownCommandHandler | 2 | Unknown command handling |
+| TestEditableSettings | 4 | Settings +/- buttons |
+| TestDayNightConfigServiceTrading | 4 | Trading param validation |
+| TestAuthSectionVisibility | 3 | Auth visible in paper mode |
 
 ---
 

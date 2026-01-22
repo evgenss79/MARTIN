@@ -26,6 +26,12 @@ SETTING_SWITCH_STREAK_AT = "day_night.switch_streak_at"
 SETTING_REMINDER_MINUTES = "day_night.reminder_minutes_before_day_end"
 SETTING_NIGHT_SESSION_MODE = "day_night.night_session_mode"
 
+# Trading settings keys for persistence
+SETTING_PRICE_CAP = "trading.price_cap"
+SETTING_CONFIRM_DELAY = "trading.confirm_delay_seconds"
+SETTING_CAP_MIN_TICKS = "trading.cap_min_ticks"
+SETTING_BASE_STAKE = "risk.stake.base_amount_usdc"
+
 
 class DayNightConfigService:
     """
@@ -53,6 +59,10 @@ class DayNightConfigService:
         default_switch_streak_at: int = 3,
         default_reminder_minutes: int = 30,
         default_night_session_mode: str = "OFF",
+        default_price_cap: float = 0.55,
+        default_confirm_delay: int = 120,
+        default_cap_min_ticks: int = 3,
+        default_base_stake: float = 10.0,
     ):
         """
         Initialize Day/Night Configuration Service.
@@ -68,6 +78,10 @@ class DayNightConfigService:
             default_switch_streak_at: Default streak count for STRICT mode
             default_reminder_minutes: Default reminder minutes before day end
             default_night_session_mode: Default night session mode (OFF/SOFT/HARD)
+            default_price_cap: Default maximum price for CAP_PASS (0.01-0.99)
+            default_confirm_delay: Default confirm delay in seconds
+            default_cap_min_ticks: Default minimum consecutive ticks for CAP_PASS
+            default_base_stake: Default base stake amount in USDC
         """
         self._settings_repo = settings_repo
         self._tz = ZoneInfo(self.TIMEZONE)
@@ -83,6 +97,10 @@ class DayNightConfigService:
             SETTING_SWITCH_STREAK_AT: default_switch_streak_at,
             SETTING_REMINDER_MINUTES: default_reminder_minutes,
             SETTING_NIGHT_SESSION_MODE: default_night_session_mode,
+            SETTING_PRICE_CAP: default_price_cap,
+            SETTING_CONFIRM_DELAY: default_confirm_delay,
+            SETTING_CAP_MIN_TICKS: default_cap_min_ticks,
+            SETTING_BASE_STAKE: default_base_stake,
         }
     
     def _get_setting(self, key: str) -> str | None:
@@ -506,4 +524,132 @@ class DayNightConfigService:
             "switch_streak_at": self.get_switch_streak_at(),
             "reminder_minutes": self.get_reminder_minutes(),
             "night_session_mode": self.get_night_session_mode().value,
+            "price_cap": self.get_price_cap(),
+            "confirm_delay_seconds": self.get_confirm_delay(),
+            "cap_min_ticks": self.get_cap_min_ticks(),
+            "base_stake": self.get_base_stake(),
         }
+    
+    # ============================================
+    # Trading Parameter Methods
+    # ============================================
+    
+    def get_price_cap(self) -> float:
+        """
+        Get maximum price for CAP_PASS validation.
+        
+        Returns:
+            Price cap value (0.01 to 0.99)
+        """
+        stored = self._get_setting(SETTING_PRICE_CAP)
+        if stored is not None:
+            return float(stored)
+        return self._defaults[SETTING_PRICE_CAP]
+    
+    def set_price_cap(self, value: float) -> bool:
+        """
+        Set maximum price for CAP_PASS validation.
+        
+        Args:
+            value: Price cap (0.01 to 0.99)
+            
+        Returns:
+            True if successfully set
+        """
+        if not 0.01 <= value <= 0.99:
+            logger.error("Invalid price cap value", value=value)
+            return False
+        
+        self._set_setting(SETTING_PRICE_CAP, str(value))
+        logger.info("Updated price cap", value=value)
+        return True
+    
+    def get_confirm_delay(self) -> int:
+        """
+        Get confirm delay in seconds.
+        
+        Returns:
+            Confirm delay in seconds (>= 0)
+        """
+        stored = self._get_setting(SETTING_CONFIRM_DELAY)
+        if stored is not None:
+            return int(stored)
+        return self._defaults[SETTING_CONFIRM_DELAY]
+    
+    def set_confirm_delay(self, seconds: int) -> bool:
+        """
+        Set confirm delay in seconds.
+        
+        Args:
+            seconds: Delay in seconds (>= 0)
+            
+        Returns:
+            True if successfully set
+        """
+        if seconds < 0:
+            logger.error("Invalid confirm delay", seconds=seconds)
+            return False
+        
+        self._set_setting(SETTING_CONFIRM_DELAY, str(seconds))
+        logger.info("Updated confirm delay", seconds=seconds)
+        return True
+    
+    def get_cap_min_ticks(self) -> int:
+        """
+        Get minimum consecutive ticks for CAP_PASS.
+        
+        Returns:
+            Minimum ticks (>= 1)
+        """
+        stored = self._get_setting(SETTING_CAP_MIN_TICKS)
+        if stored is not None:
+            return int(stored)
+        return self._defaults[SETTING_CAP_MIN_TICKS]
+    
+    def set_cap_min_ticks(self, ticks: int) -> bool:
+        """
+        Set minimum consecutive ticks for CAP_PASS.
+        
+        Args:
+            ticks: Minimum ticks (>= 1)
+            
+        Returns:
+            True if successfully set
+        """
+        if ticks < 1:
+            logger.error("Invalid cap min ticks", ticks=ticks)
+            return False
+        
+        self._set_setting(SETTING_CAP_MIN_TICKS, str(ticks))
+        logger.info("Updated cap min ticks", ticks=ticks)
+        return True
+    
+    def get_base_stake(self) -> float:
+        """
+        Get base stake amount in USDC.
+        
+        Returns:
+            Base stake amount (> 0)
+        """
+        stored = self._get_setting(SETTING_BASE_STAKE)
+        if stored is not None:
+            return float(stored)
+        return self._defaults[SETTING_BASE_STAKE]
+    
+    def set_base_stake(self, amount: float) -> bool:
+        """
+        Set base stake amount in USDC.
+        
+        Args:
+            amount: Stake amount (> 0)
+            
+        Returns:
+            True if successfully set
+        """
+        if amount <= 0:
+            logger.error("Invalid base stake", amount=amount)
+            return False
+        
+        self._set_setting(SETTING_BASE_STAKE, str(amount))
+        logger.info("Updated base stake", amount=amount)
+        return True

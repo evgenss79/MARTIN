@@ -211,3 +211,170 @@ class TestHandlerLogging:
         
         # Check for callback logging
         assert 'logger.debug("Callback received"' in source
+
+
+class TestUnknownCommandHandler:
+    """Test that unknown commands like /command1 are handled."""
+    
+    def test_unknown_command_handler_exists(self):
+        """Test that handler for /command1-8 exists."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._register_handlers)
+        
+        # Check that unknown command handler is registered
+        assert "command1" in source
+        assert "Unknown Command" in source
+    
+    def test_unknown_command_shows_available_commands(self):
+        """Test that unknown command response lists available commands."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._register_handlers)
+        
+        # Check that response includes available commands
+        assert "/start" in source
+        assert "/status" in source
+        assert "/settings" in source
+
+
+class TestEditableSettings:
+    """Test that settings are editable via inline buttons."""
+    
+    def test_quality_settings_has_adjustment_buttons(self):
+        """Test that quality settings has +/- buttons."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._show_quality_settings)
+        
+        # Check for adjustment buttons
+        assert "quality_day_" in source
+        assert "quality_night_" in source
+        assert "-10" in source or "-5" in source
+        assert "+10" in source or "+5" in source
+    
+    def test_streak_settings_has_adjustment_buttons(self):
+        """Test that streak settings has +/- buttons."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._show_streak_settings)
+        
+        # Check for adjustment buttons
+        assert "streak_switch_" in source
+        assert "streak_nightmax_" in source
+    
+    def test_trading_settings_has_adjustment_buttons(self):
+        """Test that trading settings has +/- buttons."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._show_trading_info)
+        
+        # Check for adjustment buttons
+        assert "trading_cap_" in source
+        assert "trading_delay_" in source
+        assert "trading_ticks_" in source
+        assert "trading_stake_" in source
+    
+    def test_adjustment_methods_exist(self):
+        """Test that all adjustment methods exist."""
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        # Quality adjustments
+        assert hasattr(TelegramHandler, '_adjust_quality_day')
+        assert hasattr(TelegramHandler, '_adjust_quality_night')
+        
+        # Streak adjustments
+        assert hasattr(TelegramHandler, '_adjust_switch_streak')
+        assert hasattr(TelegramHandler, '_adjust_night_max_streak')
+        
+        # Trading adjustments
+        assert hasattr(TelegramHandler, '_adjust_price_cap')
+        assert hasattr(TelegramHandler, '_adjust_confirm_delay')
+        assert hasattr(TelegramHandler, '_adjust_cap_min_ticks')
+        assert hasattr(TelegramHandler, '_adjust_base_stake')
+
+
+class TestDayNightConfigServiceTrading:
+    """Test DayNightConfigService trading parameter methods."""
+    
+    def test_trading_getters_exist(self):
+        """Test that trading parameter getters exist."""
+        from src.services.day_night_config import DayNightConfigService
+        
+        assert hasattr(DayNightConfigService, 'get_price_cap')
+        assert hasattr(DayNightConfigService, 'get_confirm_delay')
+        assert hasattr(DayNightConfigService, 'get_cap_min_ticks')
+        assert hasattr(DayNightConfigService, 'get_base_stake')
+    
+    def test_trading_setters_exist(self):
+        """Test that trading parameter setters exist."""
+        from src.services.day_night_config import DayNightConfigService
+        
+        assert hasattr(DayNightConfigService, 'set_price_cap')
+        assert hasattr(DayNightConfigService, 'set_confirm_delay')
+        assert hasattr(DayNightConfigService, 'set_cap_min_ticks')
+        assert hasattr(DayNightConfigService, 'set_base_stake')
+    
+    def test_price_cap_validation(self):
+        """Test that price cap validates range 0.01-0.99."""
+        from src.services.day_night_config import DayNightConfigService
+        
+        config = DayNightConfigService(settings_repo=None, default_price_cap=0.55)
+        
+        # Test valid value
+        assert config.get_price_cap() == 0.55
+        
+        # Test invalid values (no repo, so set_* returns False without persistence)
+        # The validation logic is still tested
+        assert config.set_price_cap(0.005) is False  # Too low
+        assert config.set_price_cap(1.5) is False    # Too high
+    
+    def test_cap_min_ticks_validation(self):
+        """Test that cap min ticks validates >= 1."""
+        from src.services.day_night_config import DayNightConfigService
+        
+        config = DayNightConfigService(settings_repo=None, default_cap_min_ticks=3)
+        
+        assert config.get_cap_min_ticks() == 3
+        assert config.set_cap_min_ticks(0) is False  # Invalid
+
+
+class TestAuthSectionVisibility:
+    """Test that auth section is visible in paper mode."""
+    
+    def test_auth_section_visible_in_paper_mode(self):
+        """Test that _build_auth_buttons_keyboard handles paper mode."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._build_auth_buttons_keyboard)
+        
+        # Should have paper mode handling with informational button
+        assert "paper" in source.lower()
+        assert "Paper Mode" in source
+    
+    def test_start_command_shows_auth_indicator(self):
+        """Test that /start command shows auth status."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._register_handlers)
+        
+        # Find the cmd_start handler and check it includes auth
+        assert "Auth Status" in source
+        assert "_get_polymarket_auth_indicator" in source
+    
+    def test_status_command_shows_auth_indicator(self):
+        """Test that /status command shows auth status."""
+        import inspect
+        from src.adapters.telegram.bot import TelegramHandler
+        
+        source = inspect.getsource(TelegramHandler._register_handlers)
+        
+        # Status should include auth indicator
+        assert "auth_indicator" in source

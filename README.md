@@ -208,6 +208,28 @@ POLYMARKET_PASSPHRASE=your_passphrase
 | `/nightonly` | Enable night-only mode |
 | `/report` | Performance report |
 
+### Setting Up BotFather Commands Menu
+
+To set up the command menu in Telegram (so users see the right commands when typing `/`), send these commands to [@BotFather](https://t.me/BotFather):
+
+1. Open chat with @BotFather
+2. Send `/setcommands`
+3. Select your bot
+4. Paste this command list:
+
+```
+start - Show welcome message and help
+status - Current stats and mode
+settings - View and edit configuration
+pause - Pause trading
+resume - Resume trading
+dayonly - Toggle day-only mode
+nightonly - Toggle night-only mode
+report - Performance report
+```
+
+**Important:** If your BotFather menu shows `/command1`, `/command2`, etc., those are placeholders. Replace them with the commands above.
+
 ## Trading Logic
 
 ### Signal Detection

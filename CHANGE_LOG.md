@@ -673,6 +673,55 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 
 ---
 
+## 2026-01-22: Telegram Commands UX + Editable Settings + Auth Visibility
+
+**Change**: Fixed Telegram command menu UX, made settings editable via inline buttons, ensured auth section visible in paper mode.
+
+**Details**:
+- **A) Commands UX (BotFather menu mismatch)**:
+  - Added handler for unknown commands `/command1` through `/command8`
+  - Unknown commands now return helpful error message with available commands list
+  - Updated README.md with BotFather commands setup instructions
+  
+- **B) Settings Editable in Telegram**:
+  - Added trading parameter controls: price_cap, confirm_delay_seconds, cap_min_ticks, base_stake
+  - Added quality threshold controls: base_day_min_quality, base_night_min_quality
+  - Added streak controls: switch_streak_at, night_max_win_streak
+  - All settings use +/- inline buttons for easy adjustment
+  - All changes persist to DB settings and apply immediately
+  - `/status` and `/settings` show effective values (DB overrides > config defaults)
+  
+- **C) Polymarket Auth Section**:
+  - Auth buttons now visible in `/start` and `/status` for all modes
+  - Paper mode shows informational "Paper Mode Active" button
+  - Live mode shows Authorize/Recheck/Logout buttons based on auth state
+  
+- **D) Tests + Docs**:
+  - Added 13 new tests for unknown command handling, editable settings, auth visibility
+  - Updated README.md with BotFather setup instructions
+  - Extended DayNightConfigService with trading parameter methods
+
+**Files Created**:
+- None
+
+**Files Modified**:
+- `src/adapters/telegram/bot.py` - Unknown command handler, editable settings buttons
+- `src/services/day_night_config.py` - Trading parameter getters/setters
+- `src/tests/test_telegram_handlers.py` - 13 new tests
+- `README.md` - BotFather commands setup instructions
+- `CHANGE_LOG.md` - This entry
+
+**Reason**: User request to fix silent failures on unknown commands, make settings editable in Telegram (no config.json editing), and ensure auth section visible even in paper mode.
+
+**Behavior Changed**: Yes
+- Unknown commands now return helpful error message (previously: silent no reaction)
+- Quality, streak, and trading settings now editable via Telegram buttons (previously: required config.json edit)
+- Auth section visible in paper mode with informational button (previously: may have been hidden)
+
+**Test Results**: 27 tests pass in test_telegram_handlers.py
+
+---
+
 ## Template for Future Entries
 
 ```markdown

@@ -257,18 +257,23 @@ Settings can be changed at runtime via Telegram /settings with full interactive 
 **Currently Implemented** (with Telegram UI):
 - `day_start_hour`, `day_end_hour` - Hour selection grid (0-23)
 - `night_autotrade_enabled` - Toggle button
+- `night_session_mode` - OFF/SOFT/HARD selection
 - `reminder_minutes_before_day_end` - Preset options (0-180 min)
+- `base_day_min_quality`, `base_night_min_quality` - +/- buttons (±5, ±10)
+- `switch_streak_at`, `night_max_win_streak` - +/- buttons (±1, ±2)
+- `price_cap` - +/- buttons (±0.01, ±0.05) with validation 0.01-0.99
+- `confirm_delay_seconds` - +/- buttons (±10s, ±30s)
+- `cap_min_ticks` - +/- buttons (±1, ±2) with validation ≥1
+- `base_amount_usdc` (stake) - +/- buttons (±$1, ±$5)
 
-**Planned** (requires config edit for now):
-- `price_cap`
-- `confirm_delay_seconds`
-- `cap_min_ticks`
-- `base_day_min_quality`, `base_night_min_quality`
-- `switch_streak_at`
-- `strict_day_q`, `strict_night_q`
-- `night_max_win_streak`
+**Not Editable via Telegram** (requires config.json edit):
+- `strict_day_q`, `strict_night_q` - Quantile selectors
+- API endpoints and timeouts
+- TA parameters (weights, periods)
 
 Runtime changes are stored in the `settings` table and persist across restarts.
+
+**Priority**: Database settings > Environment variables > config.json defaults
 
 ---
 
@@ -287,4 +292,4 @@ Runtime changes are stored in the `settings` table and persist across restarts.
 ---
 
 *This file is the authoritative configuration contract for project MARTIN.*
-*Last updated: 2026-01-21*
+*Last updated: 2026-01-22*
