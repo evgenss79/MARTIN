@@ -1,9 +1,9 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T11:25:00Z  
-**Version**: 1.0.0 (Production-Ready)  
-**Test Suite**: 212 tests passing
+**Last Updated**: 2026-01-22T11:42:00Z  
+**Version**: 1.0.1 (Telegram UX Fix)  
+**Test Suite**: 226 tests passing
 
 ---
 
@@ -13,7 +13,7 @@ All production-like QA verification has been completed successfully. The MARTIN 
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 212 |
+| Total Tests | 226 |
 | Unit Tests | 137 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -22,6 +22,7 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | E2E Integration Night | 11 |
 | E2E Edge Cases | 14 |
 | Consolidated E2E | 9 |
+| Telegram Handler Tests | 14 |
 | All Passing | ✅ |
 
 ---
@@ -39,11 +40,52 @@ The following test files exist and are committed:
 | `test_e2e_night_flow.py` | `src/tests/test_e2e_night_flow.py` | ✅ EXISTS |
 | `test_e2e_edge_cases.py` | `src/tests/test_e2e_edge_cases.py` | ✅ EXISTS |
 | `test_e2e_integration.py` | `src/tests/test_e2e_integration.py` | ✅ EXISTS |
+| `test_telegram_handlers.py` | `src/tests/test_telegram_handlers.py` | ✅ EXISTS (NEW) |
 | `QA_REPORT.md` | Repository root | ✅ EXISTS |
 
 ---
 
-## 1.2 Scheduler Tests Rewrite (2026-01-22)
+## 1.2 Telegram UX Fixes (2026-01-22)
+
+### Issues Fixed
+
+1. **Callback Timeout Bug**
+   - Problem: "TelegramBadRequest: query is too old and response timeout expired"
+   - Root Cause: `callback.answer()` was called at END of handler, after slow work
+   - Fix: Move `callback.answer()` to FIRST LINE, immediately on callback receipt
+
+2. **Gamma Market Discovery**
+   - Problem: Returns 0 markets for hourly BTC/ETH
+   - Root Cause: Query string included "hourly" (wrong)
+   - Fix: Remove "hourly" from q param, keep `recurrence=hourly` as separate param
+
+3. **Auth Buttons Missing**
+   - Problem: No authorization UI in Telegram
+   - Fix: Added auth buttons to /start and /status commands
+
+### Verification Steps
+
+```bash
+# 1. Test callback handler pattern
+grep -A5 "async def handle_callback" src/adapters/telegram/bot.py | head -10
+# Should show: await callback.answer() as first await
+
+# 2. Test Gamma query format
+grep "up or down" src/adapters/polymarket/gamma_client.py
+# Should NOT include "hourly" in the query string
+
+# 3. Test auth buttons exist
+grep "auth_authorize\|auth_logout" src/adapters/telegram/bot.py
+# Should find callback_data for auth buttons
+
+# 4. Run new tests
+python -m pytest src/tests/test_telegram_handlers.py -v
+# Should pass 14 tests
+```
+
+---
+
+## 1.3 Scheduler Tests Rewrite (2026-01-22)
 
 The scheduler tests were rewritten to match MARTIN's actual scheduling mechanism:
 

@@ -225,30 +225,62 @@ class GammaClient:
         windows: list[MarketWindow] = []
         
         for asset in assets:
-            # Search for hourly up/down markets
-            query = f"{asset} up or down hourly"
-            markets = await self.search_markets(query)
+            # Search for up/down markets with recurrence=hourly (passed to search_markets)
+            # NOTE: Do NOT include "hourly" in query string - it reduces results
+            # recurrence=hourly is already a separate query parameter
+            queries_to_try = [
+                f"{asset} up or down",  # Primary query
+                f"{asset.replace('BTC', 'Bitcoin').replace('ETH', 'Ethereum')} up or down",  # Fallback
+            ]
             
-            for market_data in markets:
-                try:
-                    window = self._parse_market(market_data, asset)
-                    
-                    # Skip expired markets
-                    if window and window.end_ts > current_ts:
-                        windows.append(window)
-                        logger.info(
-                            "Discovered market",
-                            asset=asset,
-                            slug=window.slug,
-                            start_ts=window.start_ts,
-                            end_ts=window.end_ts,
-                        )
-                except Exception as e:
-                    logger.warning(
-                        "Failed to parse market",
-                        error=str(e),
-                        market_id=market_data.get("id"),
+            for query in queries_to_try:
+                markets = await self.search_markets(query, recurrence="hourly")
+                
+                # Log top results for debugging
+                if markets:
+                    top_titles = [m.get("title", m.get("slug", "unknown"))[:60] for m in markets[:5]]
+                    logger.debug(
+                        "Gamma search results",
+                        query=query,
+                        count=len(markets),
+                        top_titles=top_titles,
                     )
+                else:
+                    logger.debug("Gamma search returned 0 results", query=query)
+                
+                for market_data in markets:
+                    try:
+                        window = self._parse_market(market_data, asset)
+                        
+                        # Skip expired markets and duplicates
+                        if window and window.end_ts > current_ts:
+                            # Check if not already in list (by slug)
+                            if not any(w.slug == window.slug for w in windows):
+                                windows.append(window)
+                                logger.info(
+                                    "Discovered market",
+                                    asset=asset,
+                                    slug=window.slug,
+                                    start_ts=window.start_ts,
+                                    end_ts=window.end_ts,
+                                )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to parse market",
+                            error=str(e),
+                            market_id=market_data.get("id"),
+                        )
+                
+                # If we found markets with primary query, no need to try fallback
+                if windows:
+                    break
+        
+        if not windows:
+            logger.warning(
+                "No hourly markets discovered",
+                assets=assets,
+                hint="Check Gamma API or try different query terms"
+            )
         
         return windows
     
