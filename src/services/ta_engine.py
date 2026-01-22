@@ -175,12 +175,28 @@ class TAEngine:
     """
     Technical Analysis Engine.
     
-    Implements signal detection and quality calculation per specification:
-    - EMA20 on 1m for signal detection (2-bar confirm)
-    - ADX on 5m for trend strength
-    - EMA50 slope on 5m for momentum
+    CANONICAL Implementation per specification:
+    - EMA20 on 1m for signal detection (2-bar confirm + crossover)
+    - ADX(14) on 1m for trend strength (normalized 0..1)
+    - EMA50 slope over last 6 bars on 1m for momentum (normalized 0..1)
     - EMA20 on 5m for trend confirmation multiplier
+    
+    Quality Formula (FIXED - no configuration):
+    quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier
+    
+    Trend multiplier: 1.10 (confirm), 0.70 (oppose), 1.00 (else)
     """
+    
+    # CANONICAL FIXED CONSTANTS (per specification - DO NOT CHANGE)
+    ANCHOR_SCALE = 10000.0          # Scale factor for anchor edge
+    W_ANCHOR = 1.0                  # Weight for anchor component
+    W_ADX = 0.2                     # Weight for ADX component
+    W_SLOPE = 0.2                   # Weight for slope component
+    TREND_BONUS = 1.10              # Multiplier when trend confirms
+    TREND_PENALTY = 0.70            # Multiplier when trend opposes
+    TREND_NEUTRAL = 1.00            # Multiplier when neutral
+    ADX_PERIOD = 14                 # ADX calculation period
+    EMA50_SLOPE_BARS = 6            # Bars for EMA50 slope calculation
     
     def __init__(
         self,
@@ -196,16 +212,21 @@ class TAEngine:
         """
         Initialize TA Engine.
         
+        NOTE: The parameters below are IGNORED for quality calculation.
+        Quality uses FIXED canonical constants per specification.
+        Parameters are retained only for backward compatibility.
+        
         Args:
-            adx_period: Period for ADX calculation
-            ema50_slope_bars: Bars to measure EMA50 slope
-            anchor_scale: Scale factor for anchor edge component
-            w_anchor: Weight for anchor edge in quality
-            w_adx: Weight for ADX in quality
-            w_slope: Weight for slope in quality
-            trend_bonus: Multiplier when trend confirms
-            trend_penalty: Multiplier when trend opposes
+            adx_period: IGNORED - uses canonical ADX_PERIOD=14
+            ema50_slope_bars: IGNORED - uses canonical EMA50_SLOPE_BARS=6
+            anchor_scale: IGNORED - uses canonical ANCHOR_SCALE=10000.0
+            w_anchor: IGNORED - uses canonical W_ANCHOR=1.0
+            w_adx: IGNORED - uses canonical W_ADX=0.2
+            w_slope: IGNORED - uses canonical W_SLOPE=0.2
+            trend_bonus: IGNORED - uses canonical TREND_BONUS=1.10
+            trend_penalty: IGNORED - uses canonical TREND_PENALTY=0.70
         """
+        # Store for backward compatibility but use class constants in calculations
         self._adx_period = adx_period
         self._ema50_slope_bars = ema50_slope_bars
         self._anchor_scale = anchor_scale
@@ -223,9 +244,18 @@ class TAEngine:
         """
         Detect trading signal from 1m candles.
         
-        Signal detection rules (EMA20 on 1m with 2-bar confirm):
-        - UP: low[i] <= ema20[i] AND close[i] > ema20[i] AND close[i+1] > ema20[i+1]
-        - DOWN: high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[i+1]
+        CANONICAL Signal detection rules (EMA20 on 1m):
+        Signal is evaluated ONLY at candle close.
+        
+        UP signal:
+        - Close[bar-1] > EMA20 (most recent closed bar)
+        - Close[bar-2] > EMA20 (prior bar)
+        - Previous bar was below EMA20 (bar-3 was below, indicating crossover)
+        
+        DOWN signal:
+        - Close[bar-1] < EMA20 (most recent closed bar)
+        - Close[bar-2] < EMA20 (prior bar)
+        - Previous bar was above EMA20 (bar-3 was above, indicating crossover)
         
         Args:
             candles_1m: 1-minute candles (including warmup)
@@ -234,7 +264,7 @@ class TAEngine:
         Returns:
             SignalResult if signal found, None otherwise
         """
-        if len(candles_1m) < 22:  # Need at least 20 for EMA + 2 for signal
+        if len(candles_1m) < 23:  # Need at least 20 for EMA + 3 for signal detection
             logger.warning("Insufficient candles for signal detection", count=len(candles_1m))
             return None
         
@@ -249,7 +279,7 @@ class TAEngine:
                 anchor_idx = i
                 break
         
-        if anchor_idx < 0 or anchor_idx >= len(candles_1m) - 1:
+        if anchor_idx < 0 or anchor_idx >= len(candles_1m) - 2:
             logger.warning("Could not find anchor bar", start_ts=start_ts)
             return None
         
@@ -265,48 +295,61 @@ class TAEngine:
         )
         
         # Scan from anchor for signal
-        for i in range(anchor_idx, len(candles_1m) - 1):
-            c_i = candles_1m[i]
-            c_i1 = candles_1m[i + 1]
-            ema_i = ema20[i]
-            ema_i1 = ema20[i + 1]
+        # Need at least 3 bars: bar-3 (previous), bar-2, bar-1 (most recent)
+        for i in range(anchor_idx + 2, len(candles_1m)):
+            # bar-1: candles_1m[i] (most recent closed bar - signal bar)
+            # bar-2: candles_1m[i-1] (prior bar)
+            # bar-3: candles_1m[i-2] (previous bar - for crossover detection)
+            c_bar1 = candles_1m[i]      # Most recent closed bar
+            c_bar2 = candles_1m[i - 1]  # Prior bar
+            c_bar3 = candles_1m[i - 2]  # Previous bar (crossover detection)
+            
+            ema_bar1 = ema20[i]
+            ema_bar2 = ema20[i - 1]
+            ema_bar3 = ema20[i - 2]
             
             # Skip if EMA not yet valid
-            if ema_i == 0 or ema_i1 == 0:
+            if ema_bar1 == 0 or ema_bar2 == 0 or ema_bar3 == 0:
                 continue
             
-            # Check UP signal
-            if c_i.low <= ema_i and c_i.close > ema_i and c_i1.close > ema_i1:
+            # CANONICAL UP signal:
+            # Close[bar-1] > EMA20, Close[bar-2] > EMA20, Previous bar was below EMA20
+            if (c_bar1.close > ema_bar1 and 
+                c_bar2.close > ema_bar2 and 
+                c_bar3.close < ema_bar3):
                 logger.info(
-                    "UP signal detected",
+                    "UP signal detected (canonical)",
                     signal_bar=i,
-                    signal_ts=c_i1.t,
-                    signal_price=c_i1.close,
+                    signal_ts=c_bar1.t,
+                    signal_price=c_bar1.close,
                 )
                 return SignalResult(
                     direction=Direction.UP,
-                    signal_ts=c_i1.t,
-                    signal_price=c_i1.close,
+                    signal_ts=c_bar1.t,
+                    signal_price=c_bar1.close,
                     anchor_bar_ts=anchor_bar.t,
                     anchor_price=anchor_price,
-                    signal_bar_index=i + 1,
+                    signal_bar_index=i,
                 )
             
-            # Check DOWN signal
-            if c_i.high >= ema_i and c_i.close < ema_i and c_i1.close < ema_i1:
+            # CANONICAL DOWN signal:
+            # Close[bar-1] < EMA20, Close[bar-2] < EMA20, Previous bar was above EMA20
+            if (c_bar1.close < ema_bar1 and 
+                c_bar2.close < ema_bar2 and 
+                c_bar3.close > ema_bar3):
                 logger.info(
-                    "DOWN signal detected",
+                    "DOWN signal detected (canonical)",
                     signal_bar=i,
-                    signal_ts=c_i1.t,
-                    signal_price=c_i1.close,
+                    signal_ts=c_bar1.t,
+                    signal_price=c_bar1.close,
                 )
                 return SignalResult(
                     direction=Direction.DOWN,
-                    signal_ts=c_i1.t,
-                    signal_price=c_i1.close,
+                    signal_ts=c_bar1.t,
+                    signal_price=c_bar1.close,
                     anchor_bar_ts=anchor_bar.t,
                     anchor_price=anchor_price,
-                    signal_bar_index=i + 1,
+                    signal_bar_index=i,
                 )
         
         logger.info("No signal detected in window")
@@ -316,21 +359,24 @@ class TAEngine:
         self,
         signal: SignalResult,
         candles_5m: list[Candle],
+        candles_1m: list[Candle] | None = None,
     ) -> QualityBreakdown:
         """
-        Calculate quality score for a signal.
+        Calculate quality score for a signal using CANONICAL formula.
         
-        Quality = (W_ANCHOR*edge_component + W_ADX*q_adx + W_SLOPE*q_slope) * trend_mult
+        CANONICAL Quality Formula (FIXED):
+        quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier
         
         Components:
-        A) Anchor edge: ret_from_anchor * ANCHOR_SCALE (with penalty for counter-signal)
-        B) ADX: value at idx5 (last 5m candle <= signal_ts)
-        C) EMA50 slope: 1000 * abs(slope50 / close5[idx5])
-        D) Trend mult: TREND_BONUS if trend confirms, TREND_PENALTY otherwise
+        A) anchor_component: distance from EMA20 on 1m, scaled by ANCHOR_SCALE = 10000.0
+        B) adx_component: ADX(14) on 1m normalized to [0..1] (ADX / 100)
+        C) slope_component: slope of EMA50 over last 6 bars on 1m, normalized to [0..1]
+        D) trend_multiplier: 1.10 (confirm), 0.70 (oppose), 1.00 (else) - based on EMA20 on 5m
         
         Args:
             signal: SignalResult from detect_signal
-            candles_5m: 5-minute candles (including warmup)
+            candles_5m: 5-minute candles (for trend confirmation via EMA20)
+            candles_1m: 1-minute candles (for ADX and EMA50 slope) - optional for backward compatibility
             
         Returns:
             QualityBreakdown with all components
@@ -340,104 +386,129 @@ class TAEngine:
             signal_price=signal.signal_price,
         )
         
-        # A) Anchor edge component
+        # A) CANONICAL anchor_component: distance from EMA20 on 1m, scaled
+        # Note: This uses signal_price which is the close at signal bar
+        # anchor_component = |close - EMA20| / close * ANCHOR_SCALE (approx distance from EMA20)
         ret_from_anchor = (signal.signal_price - signal.anchor_price) / signal.anchor_price
         breakdown.ret_from_anchor = ret_from_anchor
         
-        edge_component = abs(ret_from_anchor) * self._anchor_scale
+        # Use canonical ANCHOR_SCALE
+        anchor_component = abs(ret_from_anchor) * self.ANCHOR_SCALE
+        breakdown.edge_component = anchor_component
         
-        # Apply penalty for counter-signal direction
-        if signal.direction == Direction.UP and ret_from_anchor < 0:
-            edge_component *= 0.25
-            breakdown.edge_penalty_applied = True
-        elif signal.direction == Direction.DOWN and ret_from_anchor > 0:
-            edge_component *= 0.25
-            breakdown.edge_penalty_applied = True
+        # Use 1m candles if provided, otherwise fall back to 5m for backward compatibility
+        candles_for_adx_slope = candles_1m if candles_1m is not None else candles_5m
         
-        breakdown.edge_component = edge_component
-        
-        # Find idx5 (last 5m candle <= signal_ts)
-        idx5 = -1
-        for i, c in enumerate(candles_5m):
+        # Find signal bar index in candles
+        signal_idx = -1
+        for i, c in enumerate(candles_for_adx_slope):
             if c.t <= signal.signal_ts:
-                idx5 = i
+                signal_idx = i
             else:
                 break
         
-        if idx5 < 0:
-            # Use last candle if none match
-            idx5 = len(candles_5m) - 1
+        if signal_idx < 0:
+            signal_idx = len(candles_for_adx_slope) - 1
         
-        if idx5 < 0 or len(candles_5m) == 0:
-            logger.warning("No 5m candles available for quality calculation")
-            breakdown.final_quality = edge_component * self._w_anchor
+        if signal_idx < 0 or len(candles_for_adx_slope) == 0:
+            logger.warning("No candles available for quality calculation")
+            breakdown.final_quality = anchor_component * self.W_ANCHOR
             return breakdown
         
-        # Extract price series for 5m
-        highs_5m = [c.high for c in candles_5m]
-        lows_5m = [c.low for c in candles_5m]
-        closes_5m = [c.close for c in candles_5m]
+        # Extract price series
+        highs = [c.high for c in candles_for_adx_slope]
+        lows = [c.low for c in candles_for_adx_slope]
+        closes = [c.close for c in candles_for_adx_slope]
         
-        # B) ADX component
-        adx_values = compute_adx(highs_5m, lows_5m, closes_5m, self._adx_period)
-        adx_value = adx_values[idx5] if idx5 < len(adx_values) else 0.0
-        breakdown.adx_value = adx_value
-        breakdown.q_adx = adx_value
+        # B) CANONICAL adx_component: ADX(14) on 1m normalized to [0..1]
+        adx_values = compute_adx(highs, lows, closes, self.ADX_PERIOD)
+        adx_raw = adx_values[signal_idx] if signal_idx < len(adx_values) else 0.0
+        breakdown.adx_value = adx_raw
+        # Normalize to [0..1]: ADX typically ranges 0-100
+        adx_component = min(adx_raw / 100.0, 1.0)
+        breakdown.q_adx = adx_component
         
-        # C) EMA50 slope component
-        ema50 = compute_ema(closes_5m, 50)
+        # C) CANONICAL slope_component: slope of EMA50 over last 6 bars on 1m, normalized to [0..1]
+        ema50 = compute_ema(closes, 50)
         
-        slope_idx = idx5 - self._ema50_slope_bars
-        if slope_idx >= 0 and idx5 < len(ema50) and slope_idx < len(ema50):
-            slope50 = ema50[idx5] - ema50[slope_idx]
-            breakdown.ema50_slope = slope50
+        slope_start_idx = signal_idx - self.EMA50_SLOPE_BARS
+        slope_component = 0.0
+        if slope_start_idx >= 0 and signal_idx < len(ema50) and slope_start_idx < len(ema50):
+            ema50_now = ema50[signal_idx]
+            ema50_prev = ema50[slope_start_idx]
+            slope_raw = ema50_now - ema50_prev
+            breakdown.ema50_slope = slope_raw
             
-            close5_idx5 = closes_5m[idx5]
-            if close5_idx5 != 0:
-                breakdown.q_slope = 1000 * abs(slope50 / close5_idx5)
+            # Normalize slope to [0..1]
+            # Using percentage change approach: |slope / ema50_prev|
+            if ema50_prev != 0:
+                slope_pct = abs(slope_raw / ema50_prev)
+                # Scale by 100 and cap at 1.0 (1% change = 1.0)
+                slope_component = min(slope_pct * 100, 1.0)
+        breakdown.q_slope = slope_component
         
-        # D) Trend confirmation multiplier (EMA20 on 5m)
-        ema20_5m = compute_ema(closes_5m, 20)
+        # D) CANONICAL trend_multiplier: based on EMA20 on 5m
+        # 1.10 if confirms, 0.70 if opposes, 1.00 if neutral/unknown
+        trend_mult = self.TREND_NEUTRAL
+        trend_confirms = None
         
-        if idx5 < len(ema20_5m) and ema20_5m[idx5] != 0:
-            close5_idx5 = closes_5m[idx5]
-            ema20_val = ema20_5m[idx5]
+        if len(candles_5m) > 0:
+            # Find idx5 (last 5m candle <= signal_ts)
+            idx5 = -1
+            for i, c in enumerate(candles_5m):
+                if c.t <= signal.signal_ts:
+                    idx5 = i
+                else:
+                    break
             
-            if signal.direction == Direction.UP:
-                if close5_idx5 > ema20_val:
-                    breakdown.trend_mult = self._trend_bonus
-                    breakdown.trend_confirms = True
-                else:
-                    breakdown.trend_mult = self._trend_penalty
-                    breakdown.trend_confirms = False
-            else:  # DOWN
-                if close5_idx5 < ema20_val:
-                    breakdown.trend_mult = self._trend_bonus
-                    breakdown.trend_confirms = True
-                else:
-                    breakdown.trend_mult = self._trend_penalty
-                    breakdown.trend_confirms = False
+            if idx5 < 0:
+                idx5 = len(candles_5m) - 1
+            
+            closes_5m = [c.close for c in candles_5m]
+            ema20_5m = compute_ema(closes_5m, 20)
+            
+            if idx5 < len(ema20_5m) and ema20_5m[idx5] != 0:
+                close5_val = closes_5m[idx5]
+                ema20_val = ema20_5m[idx5]
+                
+                if signal.direction == Direction.UP:
+                    if close5_val > ema20_val:
+                        trend_mult = self.TREND_BONUS
+                        trend_confirms = True
+                    else:
+                        trend_mult = self.TREND_PENALTY
+                        trend_confirms = False
+                else:  # DOWN
+                    if close5_val < ema20_val:
+                        trend_mult = self.TREND_BONUS
+                        trend_confirms = True
+                    else:
+                        trend_mult = self.TREND_PENALTY
+                        trend_confirms = False
         
-        # Calculate weighted components
-        breakdown.w_anchor = self._w_anchor * edge_component
-        breakdown.w_adx = self._w_adx * breakdown.q_adx
-        breakdown.w_slope = self._w_slope * breakdown.q_slope
+        breakdown.trend_mult = trend_mult
+        if trend_confirms is not None:
+            breakdown.trend_confirms = trend_confirms
         
-        # Final quality
+        # CANONICAL quality formula (FIXED weights)
+        breakdown.w_anchor = self.W_ANCHOR * anchor_component
+        breakdown.w_adx = self.W_ADX * adx_component
+        breakdown.w_slope = self.W_SLOPE * slope_component
+        
         base_quality = (
-            self._w_anchor * edge_component +
-            self._w_adx * breakdown.q_adx +
-            self._w_slope * breakdown.q_slope
+            self.W_ANCHOR * anchor_component +
+            self.W_ADX * adx_component +
+            self.W_SLOPE * slope_component
         )
-        breakdown.final_quality = base_quality * breakdown.trend_mult
+        breakdown.final_quality = base_quality * trend_mult
         
         logger.info(
-            "Quality calculated",
+            "Quality calculated (canonical)",
             quality=breakdown.final_quality,
-            edge=edge_component,
-            adx=breakdown.q_adx,
-            slope=breakdown.q_slope,
-            trend_mult=breakdown.trend_mult,
+            anchor=anchor_component,
+            adx=adx_component,
+            slope=slope_component,
+            trend_mult=trend_mult,
         )
         
         return breakdown

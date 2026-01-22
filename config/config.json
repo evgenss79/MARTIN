@@ -15,14 +15,14 @@
   "day_night": {
     "day_start_hour": 8,
     "day_end_hour": 22,
-    "base_day_min_quality": 50.0,
-    "base_night_min_quality": 60.0,
+    "base_day_min_quality": 35.0,
+    "base_night_min_quality": 35.0,
     "switch_streak_at": 3,
     "strict_day_q": "p95",
     "strict_night_q": "p95",
     "night_max_win_streak": 5,
-    "night_autotrade_enabled": false,
-    "night_session_mode": "HARD"
+    "night_autotrade_enabled": true,
+    "night_session_mode": "SOFT"
   },
   "ta": {
     "warmup_seconds": 7200,

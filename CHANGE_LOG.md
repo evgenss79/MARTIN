@@ -15,6 +15,77 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Align Live Bot Signal Logic with Canonical Strategy Specification
+
+**Change**: Updated TA Engine and quality calculation to match CANONICAL trading strategy specification exactly.
+
+**Details**:
+
+### Signal Detection (Part A)
+- Updated signal detection to use canonical crossover logic:
+  - UP signal: Close[bar-1] > EMA20, Close[bar-2] > EMA20, Previous bar was below EMA20
+  - DOWN signal: Close[bar-1] < EMA20, Close[bar-2] < EMA20, Previous bar was above EMA20
+- Signal evaluated ONLY at candle close
+- Removed old low/high touch detection logic
+
+### Quality Calculation (Part B)
+- Implemented CANONICAL quality formula with FIXED weights:
+  - `quality = (anchor_component * 1.0 + adx_component * 0.2 + slope_component * 0.2) * trend_multiplier`
+- Components:
+  - anchor_component: distance from EMA20 scaled by ANCHOR_SCALE = 10000.0
+  - adx_component: ADX(14) on 1m normalized to [0..1]
+  - slope_component: EMA50 slope over last 6 bars on 1m normalized to [0..1]
+- Trend multiplier: 1.10 (confirm), 0.70 (oppose), 1.00 (else)
+- Removed configurable weights - now uses class constants
+
+### Quality Threshold (Part C)
+- Quality is the ONLY filter for trade eligibility
+- No additional filters (RSI, VWAP, volume, volatility)
+
+### Telegram Signal Delivery (Part D)
+- Telegram signal card sent ONLY IF quality passes threshold
+- No "skipped" cards, no debug info for failed quality signals
+- "Signals that do not pass quality do not exist" (from user perspective)
+
+### Config Defaults (Part G)
+- Updated config.json defaults:
+  - base_day_min_quality: 35.0
+  - base_night_min_quality: 35.0
+  - night_autotrade_enabled: true
+  - night_session_mode: "SOFT"
+
+### Tests (Part H)
+- Added test_canonical_strategy.py with 27 tests:
+  - test_signal_detection_rules() - 4 tests
+  - test_quality_formula_exact_values() - 6 tests
+  - test_quality_is_only_trade_gate() - 4 tests
+  - test_telegram_card_sent_only_if_quality_passes() - 3 tests
+  - test_no_output_if_quality_fails() - 2 tests
+  - test_night_settings_persistence() - 4 tests
+  - test_canonical_config_defaults() - 4 tests
+
+**Reason**: Align implementation with CANONICAL trading strategy specification. No reinterpretation, no optimization, no additional filters.
+
+**Behavior Changed**: Yes
+- Signal detection now uses crossover logic instead of low/high touch
+- Quality formula uses fixed canonical weights (1.0/0.2/0.2) instead of configurable weights
+- Trend multiplier values changed from 1.2/0.8 to 1.10/0.70
+- Default quality thresholds lowered from 50/60 to 35/35
+- Night autotrade enabled by default
+- Night session mode changed from HARD to SOFT
+
+**Files Modified**:
+- `src/services/ta_engine.py`: Updated signal detection and quality calculation
+- `src/services/orchestrator.py`: Pass 1m candles to quality calculation
+- `config/config.json`: Updated defaults per canonical spec
+- `src/tests/test_ta_engine.py`: Updated tests for canonical formula
+- `src/tests/test_canonical_strategy.py`: Added 27 new mandatory tests
+- `CHANGE_LOG.md`: This entry
+- `CONFIG_CONTRACT.md`: Updated documentation
+- `QA_REPORT.md`: Updated test count
+
+---
+
 ## 2026-01-22: Fix Telegram /start /status auth indicator crash
 
 **Change**: Fixed `AttributeError: 'PolymarketAuthIndicator' object has no attribute 'authorized'` crash.

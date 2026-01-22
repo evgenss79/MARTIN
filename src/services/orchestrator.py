@@ -344,8 +344,12 @@ class Orchestrator:
             self._state_machine.on_no_signal(trade)
             return None
         
-        # Calculate quality
-        quality_breakdown = self._ta_engine.calculate_quality(signal_result, candles_5m)
+        # Calculate quality (pass both 1m and 5m candles per canonical spec)
+        quality_breakdown = self._ta_engine.calculate_quality(
+            signal_result, 
+            candles_5m, 
+            candles_1m=candles_1m
+        )
         
         # Create signal record
         confirm_ts = signal_result.signal_ts + self._confirm_delay
