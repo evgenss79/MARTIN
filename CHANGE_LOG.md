@@ -722,6 +722,64 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 
 ---
 
+## 2026-01-22: Fix Gamma Market Discovery (Zero-Market Issue)
+
+**Change**: Complete rewrite of Gamma market discovery to properly parse event-driven API response structure.
+
+**Root Cause Analysis**:
+- The Gamma API `/public-search` endpoint returns an `events[]` array with nested `markets[]` per event
+- Previous code used `response.get("markets", [])` which only looked at top-level markets
+- Most markets are nested within events, not at the top level
+- This resulted in ZERO markets being discovered despite valid API responses
+
+**Details**:
+- **Discovery Model (Event-Driven)**:
+  - Gamma returns events[] with nested markets[]
+  - Now extracts markets from BOTH top-level and nested event markets
+  - Filtering is applied at MARKET level, not EVENT level
+  
+- **Market Filtering Rules (case-insensitive)**:
+  - "up or down"
+  - "up/down"
+  - "updown"
+  - Uses regex patterns for robust matching
+  
+- **Time Window Handling**:
+  - Timestamp fallback chain: market-level → event-level
+  - Configurable forward_horizon_seconds (default 2 hours)
+  - Configurable grace_period_seconds (default 5 min)
+  
+- **Token ID Extraction**:
+  - Supports tokens[] array with outcome field
+  - Supports outcomes[] + clobTokenIds[] arrays
+  - Handles JSON string arrays (some fields return JSON strings)
+  - Handles Yes/No as Up/Down equivalents
+  
+- **Diagnostic Logging**:
+  - Events scanned count
+  - Markets scanned count
+  - Title matches before time filter
+  - Title matches after time filter
+  - Sample market titles and end times
+
+**Files Modified**:
+- `src/adapters/polymarket/gamma_client.py` - Complete discovery logic rewrite
+
+**Files Created**:
+- `src/tests/test_gamma_discovery.py` - 28 new tests for discovery logic
+
+**Reason**: Critical bug fix - market discovery was returning ZERO hourly "up or down" markets for BTC/ETH despite Gamma API returning valid data.
+
+**Behavior Changed**: Yes
+- Markets are now correctly discovered from events[] with nested markets[]
+- Title filtering uses regex patterns for "up or down" variants
+- Timestamp fallback ensures markets aren't discarded due to missing market-level timestamps
+- Grace periods and forward horizons provide more flexible time filtering
+
+**Test Results**: 267 tests pass (239 original + 28 new)
+
+---
+
 ## Template for Future Entries
 
 ```markdown

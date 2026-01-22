@@ -25,10 +25,35 @@
 
 **Purpose**: Find active Polymarket hourly markets
 
+**Discovery Model (Event-Driven)**:
+- Gamma API returns `events[]` array with nested `markets[]` per event
+- Discovery extracts markets from BOTH top-level markets AND nested event markets
+- Filtering is applied at MARKET level, not event level
+
+**API Flow**:
 - Calls Gamma API `/public-search` endpoint
-- Filters for BTC/ETH "up or down" hourly markets
-- Extracts token IDs, timestamps, condition IDs
-- Creates `MarketWindow` objects
+- Parses response: `{ "events": [...], "markets": [...] }`
+- Extracts nested markets from each event
+- Propagates event-level data (timestamps, title) to markets for fallback
+
+**Market Filtering Rules** (case-insensitive):
+- Title/question must contain: "up or down", "up/down", or "updown"
+- Title/question must contain asset symbol (BTC, ETH) or name (Bitcoin, Ethereum)
+
+**Time Window Handling**:
+- Timestamp fallback chain: market-level → event-level
+- Configurable `forward_horizon_seconds` (default: 2 hours)
+- Configurable `grace_period_seconds` (default: 5 minutes)
+
+**Token ID Extraction**:
+- Extracts from `tokens[]` array with outcome field
+- Falls back to `outcomes[]` + `clobTokenIds[]` arrays
+- Handles JSON string arrays and Yes/No as Up/Down equivalents
+
+**Diagnostic Logging**:
+- Events scanned, markets scanned
+- Title matches before/after time filter
+- Sample market titles and end times
 
 **Inputs**: Asset list, current timestamp
 **Outputs**: List of `MarketWindow` models
