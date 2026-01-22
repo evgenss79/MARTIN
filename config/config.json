@@ -56,7 +56,7 @@
     }
   },
   "telegram": {
-    "admin_user_ids": [],
+    "admin_user_ids": [433481866],
     "message_rate_limit_per_minute": 20
   },
   "storage": {
