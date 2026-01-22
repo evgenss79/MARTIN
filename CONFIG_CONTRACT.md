@@ -51,23 +51,32 @@ Priority: Runtime > Environment > Config file
 |-----|------|---------|-------|-------------|
 | `day_night.day_start_hour` | int | 8 | 0–23 | Day mode start (local timezone) |
 | `day_night.day_end_hour` | int | 22 | 0–23 | Day mode end (local timezone) |
-| `day_night.base_day_min_quality` | float | 50.0 | ≥ 0 | ⚠️ Minimum quality for day BASE mode |
-| `day_night.base_night_min_quality` | float | 60.0 | ≥ 0 | ⚠️ Minimum quality for night BASE mode |
+| `day_night.base_day_min_quality` | float | 35.0 | ≥ 0 | ⚠️ Minimum quality for day BASE mode (CANONICAL) |
+| `day_night.base_night_min_quality` | float | 35.0 | ≥ 0 | ⚠️ Minimum quality for night BASE mode (CANONICAL) |
 | `day_night.switch_streak_at` | int | 3 | ≥ 1 | Streak count to trigger STRICT mode |
-| `day_night.strict_day_q` | string | "p95" | p90/p95/p97/p99 | Quantile for STRICT day threshold |
-| `day_night.strict_night_q` | string | "p95" | p90/p95/p97/p99 | Quantile for STRICT night threshold |
+| `day_night.strict_day_q` | string | "p95" | p90/p95/p97/p99 | Quantile for STRICT day threshold (analytics only) |
+| `day_night.strict_night_q` | string | "p95" | p90/p95/p97/p99 | Quantile for STRICT night threshold (analytics only) |
 | `day_night.night_max_win_streak` | int | 5 | ≥ 1 | ⚠️ Max night wins before session reset |
-| `day_night.night_autotrade_enabled` | bool | false | — | ⚠️ Enable autonomous night trading |
-| `day_night.night_session_mode` | string | "OFF" | OFF/SOFT/HARD | ⚠️ Night session reset behavior |
+| `day_night.night_autotrade_enabled` | bool | true | — | ⚠️ Enable autonomous night trading (CANONICAL default: true) |
+| `day_night.night_session_mode` | string | "SOFT" | OFF/SOFT/HARD | ⚠️ Night session reset behavior (CANONICAL default: SOFT) |
 | `day_night.reminder_minutes_before_day_end` | int | 30 | 0–180 | Reminder minutes (0=disabled) |
+
+**CANONICAL Quality Threshold Rule**:
+> Only signals passing quality threshold are visible to the user.
+> Quality is the ONLY filter for trade eligibility.
+> No RSI, VWAP, volume, or volatility filters.
 
 **Night Session Mode** (⚠️ Safety-Critical):
 - `OFF`: Night trading disabled. Series freezes overnight.
-- `SOFT`: On night session cap, reset only night_streak. Trade-level streak continues.
+- `SOFT`: On night session cap, reset only night_streak. Trade-level streak continues. (CANONICAL default)
 - `HARD`: On night session cap, reset ALL streaks and series counters.
 
+**Strict/Quantile Thresholds** (Analytics Only):
+> Any "strict", "quantile", or "adaptive" thresholds MUST NOT influence trade eligibility.
+> They MAY exist only for analytics/statistics display.
+
 **Safety-Critical** (⚠️):
-- `night_autotrade_enabled`: Only enable when confident in system
+- `night_autotrade_enabled`: Enabled by default per canonical spec
 - `night_max_win_streak`: Caps autonomous trading risk
 - `night_session_mode`: Controls reset behavior on session cap
 - Quality thresholds: Control trade selectivity
@@ -79,16 +88,54 @@ Priority: Runtime > Environment > Config file
 | Key | Type | Default | Range | Description |
 |-----|------|---------|-------|-------------|
 | `ta.warmup_seconds` | int | 7200 | ≥ 0 | Historical data for indicator warmup |
-| `ta.adx_period` | int | 14 | ≥ 1 | ADX calculation period |
-| `ta.ema50_slope_bars` | int | 5 | ≥ 1 | Bars for EMA50 slope calculation |
-| `ta.anchor_scale` | float | 10000.0 | > 0 | Scale factor for anchor edge |
-| `ta.w_anchor` | float | 0.3 | 0–1 | Weight for anchor edge component |
-| `ta.w_adx` | float | 0.4 | 0–1 | Weight for ADX component |
-| `ta.w_slope` | float | 0.3 | 0–1 | Weight for slope component |
-| `ta.trend_bonus` | float | 1.2 | ≥ 1 | Multiplier when trend confirms |
-| `ta.trend_penalty` | float | 0.8 | 0–1 | Multiplier when trend opposes |
+| `ta.adx_period` | int | 14 | ≥ 1 | ADX calculation period (IGNORED - uses fixed 14) |
+| `ta.ema50_slope_bars` | int | 5 | ≥ 1 | Bars for EMA50 slope (IGNORED - uses fixed 6) |
+| `ta.anchor_scale` | float | 10000.0 | > 0 | Scale factor for anchor edge (IGNORED - uses fixed 10000.0) |
+| `ta.w_anchor` | float | 0.3 | 0–1 | Weight for anchor component (IGNORED - uses fixed 1.0) |
+| `ta.w_adx` | float | 0.4 | 0–1 | Weight for ADX component (IGNORED - uses fixed 0.2) |
+| `ta.w_slope` | float | 0.3 | 0–1 | Weight for slope component (IGNORED - uses fixed 0.2) |
+| `ta.trend_bonus` | float | 1.2 | ≥ 1 | Multiplier when trend confirms (IGNORED - uses fixed 1.10) |
+| `ta.trend_penalty` | float | 0.8 | 0–1 | Multiplier when trend opposes (IGNORED - uses fixed 0.70) |
 
-**Note**: `w_anchor + w_adx + w_slope` should equal 1.0 for normalized quality.
+**SPEC Quality Formula (FIXED - config values are IGNORED)**:
+```
+quality = (W_ANCHOR*edge_component + W_ADX*q_adx + W_SLOPE*q_slope) * trend_mult
+
+Constants (FIXED, not configurable):
+- ANCHOR_SCALE = 10000.0
+- W_ANCHOR = 1.0
+- W_ADX = 0.2
+- W_SLOPE = 0.2
+- ADX_PERIOD = 14
+- EMA50_SLOPE_BARS = 6
+- TREND_BONUS = 1.10
+- TREND_PENALTY = 0.70
+
+Components (all use 5m candles except anchor):
+C1) edge_component = abs(ret_from_anchor) * ANCHOR_SCALE
+    - Penalty: *= 0.25 if direction inconsistent with return
+C2) q_adx = adx_5m[idx5] (raw ADX value, NOT normalized)
+C3) q_slope = 1000 * abs(slope50 / close_5m[idx5])
+C4) trend_mult = TREND_BONUS if close_5m confirms direction, else TREND_PENALTY
+```
+
+**Signal Detection (SPEC)**:
+```
+UP signal at index i:
+- low_1m[i] <= ema20_1m[i]  (touch from below)
+- close_1m[i] > ema20_1m[i] (close above)
+- close_1m[i+1] > ema20_1m[i+1] (confirm)
+signal_ts = ts_1m[i+1], signal_price = close_1m[i+1]
+
+DOWN signal at index i:
+- high_1m[i] >= ema20_1m[i] (touch from above)
+- close_1m[i] < ema20_1m[i] (close below)
+- close_1m[i+1] < ema20_1m[i+1] (confirm)
+signal_ts = ts_1m[i+1], signal_price = close_1m[i+1]
+```
+
+**Note**: The TA config values are retained for backward compatibility but are IGNORED. 
+The quality formula uses FIXED constants as specified above.
 
 ---
 

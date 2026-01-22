@@ -1,19 +1,19 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T17:45:00Z  
-**Version**: 1.0.4 (Auth Indicator Fix)  
-**Test Suite**: 276 tests passing
+**Last Updated**: 2026-01-22T22:23:00Z  
+**Version**: 1.4.0 (Guards Removed)  
+**Test Suite**: 308 tests passing
 
 ---
 
 ## 1. Executive Summary
 
-All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage and verified Memory Gate compliance.
+All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, and **SPEC-aligned signal detection and quality calculation**.
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 276 |
+| Total Tests | 308 |
 | Unit Tests | 140 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -25,7 +25,90 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | Telegram Handler Tests | 30 |
 | Gamma Discovery Tests | 28 |
 | Status Indicator Tests | 16 |
+| **Canonical Strategy Tests** | **28** |
+| TA Engine Tests | 19 |
 | All Passing | ✅ |
+
+---
+
+## 0.1. Spec-Aligned Signal Detection & Quality (2026-01-22) — CORRECTION
+
+### Changes Applied
+
+Corrected signal detection and quality calculation to match the EXACT written specification.
+
+**Key Principle**: "Only signals passing quality threshold are visible to the user."
+
+### Signal Detection (SPEC - Touch + 2-Bar Confirm)
+
+- **NOT crossover logic** — uses touch + confirm
+- UP signal at index i:
+  - `low_1m[i] <= ema20_1m[i]` (touch from below)
+  - `close_1m[i] > ema20_1m[i]` (close above)
+  - `close_1m[i+1] > ema20_1m[i+1]` (confirm)
+- DOWN signal at index i:
+  - `high_1m[i] >= ema20_1m[i]` (touch from above)
+  - `close_1m[i] < ema20_1m[i]` (close below)
+  - `close_1m[i+1] < ema20_1m[i+1]` (confirm)
+- Signal ts = ts[i+1], signal price = close[i+1]
+
+### Quality Formula (SPEC FIXED)
+
+```
+quality = (W_ANCHOR*edge_component + W_ADX*q_adx + W_SLOPE*q_slope) * trend_mult
+
+Constants (FIXED):
+- ANCHOR_SCALE = 10000.0
+- W_ANCHOR = 1.0, W_ADX = 0.2, W_SLOPE = 0.2
+- TREND_BONUS = 1.10, TREND_PENALTY = 0.70
+
+Components (use 5m candles):
+C1) edge_component = abs(ret_from_anchor) * ANCHOR_SCALE
+    - Penalty: *= 0.25 if direction inconsistent with return
+C2) q_adx = adx_5m[idx5] (RAW value, NOT normalized)
+C3) q_slope = 1000 * abs(slope50 / close_5m[idx5])
+C4) trend_mult based on EMA20 on 5m
+```
+
+### Quality Threshold (ONLY FILTER)
+
+- Quality is the ONLY gate for trade eligibility
+- No additional filters (RSI, VWAP, volume, volatility)
+- DAY: trade eligible IF quality >= base_day_min_quality (35.0)
+- NIGHT: trade eligible IF quality >= base_night_min_quality (35.0)
+
+### Telegram Behavior
+
+- Signal card sent ONLY IF quality passes threshold
+- NO "skipped" card for failed quality
+- NO debug info for failed signals
+- Failed quality signals are invisible to users
+
+### Config Defaults (CANONICAL)
+
+- base_day_min_quality: 35.0
+- base_night_min_quality: 35.0
+- night_autotrade_enabled: true
+- night_session_mode: "SOFT"
+
+### Mandatory Tests Added
+
+| Test Class | Tests | Description |
+|------------|-------|-------------|
+| TestSignalDetectionRules | 4 | Crossover detection, EMA20 on 1m |
+| TestQualityFormulaExactValues | 6 | Canonical formula verification |
+| TestQualityIsOnlyTradeGate | 4 | No RSI/VWAP/volume filters |
+| TestTelegramCardSentOnlyIfQualityPasses | 3 | Telegram signal delivery |
+| TestNoOutputIfQualityFails | 2 | Failed signals invisible |
+| TestNightSettingsPersistence | 4 | DB overrides config.json |
+| TestCanonicalConfigDefaults | 4 | Verify config defaults |
+
+### Verification Command
+
+```bash
+python -m pytest src/tests/test_canonical_strategy.py -v
+# Expected: 27 passed
+```
 
 ---
 

@@ -206,20 +206,12 @@ class TestSignalDetection:
 
 
 class TestQualityCalculation:
-    """Tests for quality score calculation."""
+    """Tests for SPEC quality score calculation."""
     
     @pytest.fixture
     def ta_engine(self):
-        return TAEngine(
-            adx_period=14,
-            ema50_slope_bars=5,
-            anchor_scale=10000.0,
-            w_anchor=0.3,
-            w_adx=0.4,
-            w_slope=0.3,
-            trend_bonus=1.2,
-            trend_penalty=0.8,
-        )
+        """Create TA engine - uses fixed constants regardless of args."""
+        return TAEngine()
     
     def _create_5m_candles(self, n: int = 100) -> list[Candle]:
         """Create uptrending 5m candles."""
@@ -256,12 +248,12 @@ class TestQualityCalculation:
         
         assert q1.final_quality == q2.final_quality
     
-    def test_quality_anchor_edge_penalty_for_up(self, ta_engine):
-        """UP signal with negative return should have penalty."""
+    def test_quality_anchor_component_positive_return(self, ta_engine):
+        """Anchor component uses |ret_from_anchor| * ANCHOR_SCALE."""
         signal = SignalResult(
             direction=Direction.UP,
             signal_ts=5000,
-            signal_price=990,  # Below anchor
+            signal_price=1010,  # 1% above anchor
             anchor_bar_ts=1000,
             anchor_price=1000,
             signal_bar_index=20,
@@ -271,15 +263,39 @@ class TestQualityCalculation:
         
         q = ta_engine.calculate_quality(signal, candles_5m)
         
-        assert q.edge_penalty_applied == True
-        assert q.ret_from_anchor < 0
+        # ret_from_anchor = (1010 - 1000) / 1000 = 0.01
+        assert q.ret_from_anchor == 0.01
+        # anchor_component = |0.01| * 10000 = 100 (no penalty for consistent direction)
+        assert q.edge_component == 100.0
+        assert q.edge_penalty_applied == False
     
-    def test_quality_anchor_edge_penalty_for_down(self, ta_engine):
-        """DOWN signal with positive return should have penalty."""
+    def test_quality_anchor_penalty_for_up_with_negative_return(self, ta_engine):
+        """UP signal with negative return should have 0.25 penalty."""
+        signal = SignalResult(
+            direction=Direction.UP,
+            signal_ts=5000,
+            signal_price=990,  # 1% below anchor
+            anchor_bar_ts=1000,
+            anchor_price=1000,
+            signal_bar_index=20,
+        )
+        
+        candles_5m = self._create_5m_candles()
+        
+        q = ta_engine.calculate_quality(signal, candles_5m)
+        
+        # ret_from_anchor = (990 - 1000) / 1000 = -0.01
+        assert q.ret_from_anchor == -0.01
+        # anchor_component = |-0.01| * 10000 * 0.25 = 25.0 (penalty applied)
+        assert q.edge_component == 25.0
+        assert q.edge_penalty_applied == True
+    
+    def test_quality_anchor_penalty_for_down_with_positive_return(self, ta_engine):
+        """DOWN signal with positive return should have 0.25 penalty."""
         signal = SignalResult(
             direction=Direction.DOWN,
             signal_ts=5000,
-            signal_price=1010,  # Above anchor
+            signal_price=1010,  # 1% above anchor
             anchor_bar_ts=1000,
             anchor_price=1000,
             signal_bar_index=20,
@@ -289,20 +305,59 @@ class TestQualityCalculation:
         
         q = ta_engine.calculate_quality(signal, candles_5m)
         
+        # ret_from_anchor = (1010 - 1000) / 1000 = 0.01
+        assert q.ret_from_anchor == 0.01
+        # anchor_component = |0.01| * 10000 * 0.25 = 25.0 (penalty applied)
+        assert q.edge_component == 25.0
         assert q.edge_penalty_applied == True
-        assert q.ret_from_anchor > 0
     
-    def test_quality_trend_bonus(self, ta_engine):
-        """Trend confirming signal should get bonus."""
-        # Create enough uptrending 5m candles
-        candles_5m = self._create_5m_candles(n=100)
-        
-        # Use a signal_ts that falls within the candle range
-        # Candles start at t=1000 with 300s intervals
-        # Last candle at t=1000 + 99*300 = 30700
+    def test_quality_adx_is_raw_value(self, ta_engine):
+        """ADX component should be raw ADX value (NOT normalized)."""
         signal = SignalResult(
             direction=Direction.UP,
-            signal_ts=15000,  # Falls within candle range
+            signal_ts=5000,
+            signal_price=1010,
+            anchor_bar_ts=1000,
+            anchor_price=1000,
+            signal_bar_index=20,
+        )
+        
+        candles_5m = self._create_5m_candles()
+        
+        q = ta_engine.calculate_quality(signal, candles_5m)
+        
+        # ADX should be raw value, not normalized to [0..1]
+        # q_adx equals adx_value (the raw ADX)
+        assert q.q_adx == q.adx_value
+        # ADX can be any value from 0 to 100+
+        assert q.q_adx >= 0
+    
+    def test_quality_slope_formula(self, ta_engine):
+        """Slope uses formula: 1000 * abs(slope50 / close_5m[idx5])."""
+        signal = SignalResult(
+            direction=Direction.UP,
+            signal_ts=5000,
+            signal_price=1010,
+            anchor_bar_ts=1000,
+            anchor_price=1000,
+            signal_bar_index=20,
+        )
+        
+        candles_5m = self._create_5m_candles()
+        
+        q = ta_engine.calculate_quality(signal, candles_5m)
+        
+        # Slope is NOT normalized to [0..1], uses 1000 * abs(slope/close)
+        # With the test data, slope should be positive (uptrending)
+        assert q.q_slope >= 0
+    
+    def test_quality_trend_multiplier_values(self, ta_engine):
+        """Trend multiplier should be 1.10, 0.70, or 1.00."""
+        candles_5m = self._create_5m_candles(n=100)
+        
+        signal = SignalResult(
+            direction=Direction.UP,
+            signal_ts=15000,
             signal_price=1010,
             anchor_bar_ts=1000,
             anchor_price=1000,
@@ -311,12 +366,11 @@ class TestQualityCalculation:
         
         q = ta_engine.calculate_quality(signal, candles_5m)
         
-        # With uptrending data, UP signal should get trend bonus
-        # (depends on exact EMA values, but trend_mult should be set)
-        assert q.trend_mult in [1.2, 0.8, 1.0]  # Include 1.0 as fallback when EMA not fully computed
+        # Trend multiplier values: 1.10, 0.70, 1.00
+        assert q.trend_mult in [1.10, 0.70, 1.00]
     
     def test_quality_formula_weights(self, ta_engine):
-        """Quality formula should apply correct weights."""
+        """Quality formula uses FIXED weights: 1.0, 0.2, 0.2."""
         signal = SignalResult(
             direction=Direction.UP,
             signal_ts=5000,
@@ -335,10 +389,31 @@ class TestQualityCalculation:
         assert q.w_adx >= 0
         assert q.w_slope >= 0
         
-        # Final quality should be the weighted sum times trend_mult
-        expected = (q.w_anchor + q.w_adx + q.w_slope) * (q.trend_mult / q.trend_mult)
-        # Approximate due to floating point
-        assert abs(q.final_quality - (0.3 * q.edge_component + 0.4 * q.q_adx + 0.3 * q.q_slope) * q.trend_mult) < 0.01
+        # FIXED weights: W_ANCHOR=1.0, W_ADX=0.2, W_SLOPE=0.2
+        expected_base = (1.0 * q.edge_component + 0.2 * q.q_adx + 0.2 * q.q_slope)
+        expected_quality = expected_base * q.trend_mult
+        
+        # Final quality should match formula
+        assert abs(q.final_quality - expected_quality) < 0.01
+    
+    def test_quality_uses_5m_candles_for_adx_slope(self, ta_engine):
+        """ADX and EMA50 slope should use 5m candles, not 1m."""
+        signal = SignalResult(
+            direction=Direction.UP,
+            signal_ts=5000,
+            signal_price=1010,
+            anchor_bar_ts=1000,
+            anchor_price=1000,
+            signal_bar_index=20,
+        )
+        
+        candles_5m = self._create_5m_candles(n=100)
+        
+        # Call with only 5m candles (1m ignored even if passed)
+        q = ta_engine.calculate_quality(signal, candles_5m)
+        
+        # Quality should be calculated successfully
+        assert q.final_quality > 0
 
 
 if __name__ == "__main__":

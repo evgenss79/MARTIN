@@ -15,6 +15,135 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Remove TA Data Sufficiency Guards
+
+**Change**: Removed the data sufficiency guards (120/60/idx5>=55) from TA Engine.
+
+**Details**:
+
+The guards that were added earlier have been removed per project owner decision.
+The TA strategy now runs without these artificial hard gates.
+
+### Removed Components
+- Removed `MIN_1M_CANDLES_FOR_SIGNAL = 120` constant and guard logic
+- Removed `MIN_5M_CANDLES_FOR_QUALITY = 60` constant and guard logic
+- Removed `MIN_IDX5_FOR_QUALITY = 55` constant and guard logic
+- Removed `insufficient_5m_data` field from QualityBreakdown
+- Removed `TestDataSufficiencyGuards` test class (8 tests)
+
+### Restored Behavior
+- Signal detection requires minimum 22 candles (20 for EMA + 2 for signal pattern)
+- Quality calculation proceeds with available data
+- No hard gates on historical depth
+
+### Documentation Updated
+- CONFIG_CONTRACT.md: Removed "Data Sufficiency Guards" section
+- ARCHITECTURE.md: Removed guard documentation from TA Engine section
+- QA_REPORT.md: Updated test count (316 → 308)
+- CHANGE_LOG.md: This entry
+
+**Reason**: Project owner decision to run TA strategy without artificial hard gates.
+
+**Behavior Changed**: Yes (guards removed, strategy runs with available data)
+
+**Files Modified**:
+- `src/services/ta_engine.py`: Removed guard constants and logic
+- `src/domain/models.py`: Removed `insufficient_5m_data` field
+- `src/tests/test_ta_engine.py`: Removed TestDataSufficiencyGuards class
+- Documentation files updated
+
+---
+
+## 2026-01-22: Fix Signal Detection and Quality Calculation to Match Written Spec
+
+**Change**: Corrected TA Engine to match the EXACT written specification (touch + 2-bar confirm, not crossover).
+
+**Details**:
+
+### Signal Detection (Corrected)
+- Fixed signal detection to use touch+confirm logic (as originally written):
+  - UP signal at index i: `low[i] <= ema20[i] AND close[i] > ema20[i] AND close[i+1] > ema20[i+1]`
+  - DOWN signal at index i: `high[i] >= ema20[i] AND close[i] < ema20[i] AND close[i+1] < ema20[i+1]`
+- Signal ts = ts[i+1], signal price = close[i+1]
+
+### Quality Calculation (Corrected)
+- ADX and EMA50 slope now use **5m candles** (not 1m)
+- ADX is **raw value** (not normalized to [0..1])
+- Slope uses formula: `q_slope = 1000 * abs(slope50 / close_5m[idx5])`
+- **Penalty restored**: edge_component *= 0.25 if direction inconsistent with return
+- FIXED weights: W_ANCHOR=1.0, W_ADX=0.2, W_SLOPE=0.2
+- FIXED trend multipliers: 1.10 (confirm), 0.70 (oppose)
+
+### Tests (Updated)
+- Updated test_ta_engine.py for:
+  - Touch+confirm signal detection
+  - Penalty application (0.25 cases)
+  - ADX raw value (not normalized)
+  - Slope 1000x formula
+  - 5m candles for ADX/slope
+- Updated test_canonical_strategy.py to match written spec
+
+**Reason**: Previous implementation incorrectly used crossover logic and normalized ADX/slope. Corrected to match the exact written specification.
+
+**Behavior Changed**: Yes
+- Signal detection now requires low/high touch (not just close crossover)
+- Quality components use 5m candles (not 1m)
+- ADX/slope are raw values (not normalized)
+
+**Files Modified**:
+- `src/services/ta_engine.py`: Fixed signal detection and quality calculation
+- `src/services/orchestrator.py`: Removed candles_1m from quality call
+- `src/tests/test_ta_engine.py`: Updated tests for correct spec
+- `src/tests/test_canonical_strategy.py`: Updated tests for correct spec
+- `CHANGE_LOG.md`: This entry
+- `CONFIG_CONTRACT.md`: Updated documentation
+- `QA_REPORT.md`: Updated test count
+
+---
+
+## 2026-01-22: Align Live Bot Signal Logic with Canonical Strategy Specification (REVERTED)
+
+**Note**: This entry documents an incorrect implementation that was later corrected.
+
+**Change**: Updated TA Engine and quality calculation (incorrectly used crossover logic).
+- Updated config.json defaults:
+  - base_day_min_quality: 35.0
+  - base_night_min_quality: 35.0
+  - night_autotrade_enabled: true
+  - night_session_mode: "SOFT"
+
+### Tests (Part H)
+- Added test_canonical_strategy.py with 27 tests:
+  - test_signal_detection_rules() - 4 tests
+  - test_quality_formula_exact_values() - 6 tests
+  - test_quality_is_only_trade_gate() - 4 tests
+  - test_telegram_card_sent_only_if_quality_passes() - 3 tests
+  - test_no_output_if_quality_fails() - 2 tests
+  - test_night_settings_persistence() - 4 tests
+  - test_canonical_config_defaults() - 4 tests
+
+**Reason**: Align implementation with CANONICAL trading strategy specification. No reinterpretation, no optimization, no additional filters.
+
+**Behavior Changed**: Yes
+- Signal detection now uses crossover logic instead of low/high touch
+- Quality formula uses fixed canonical weights (1.0/0.2/0.2) instead of configurable weights
+- Trend multiplier values changed from 1.2/0.8 to 1.10/0.70
+- Default quality thresholds lowered from 50/60 to 35/35
+- Night autotrade enabled by default
+- Night session mode changed from HARD to SOFT
+
+**Files Modified**:
+- `src/services/ta_engine.py`: Updated signal detection and quality calculation
+- `src/services/orchestrator.py`: Pass 1m candles to quality calculation
+- `config/config.json`: Updated defaults per canonical spec
+- `src/tests/test_ta_engine.py`: Updated tests for canonical formula
+- `src/tests/test_canonical_strategy.py`: Added 27 new mandatory tests
+- `CHANGE_LOG.md`: This entry
+- `CONFIG_CONTRACT.md`: Updated documentation
+- `QA_REPORT.md`: Updated test count
+
+---
+
 ## 2026-01-22: Fix Telegram /start /status auth indicator crash
 
 **Change**: Fixed `AttributeError: 'PolymarketAuthIndicator' object has no attribute 'authorized'` crash.

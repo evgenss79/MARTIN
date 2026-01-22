@@ -344,7 +344,7 @@ class Orchestrator:
             self._state_machine.on_no_signal(trade)
             return None
         
-        # Calculate quality
+        # Calculate quality (uses 5m candles for ADX, EMA50 slope, trend confirmation)
         quality_breakdown = self._ta_engine.calculate_quality(signal_result, candles_5m)
         
         # Create signal record
