@@ -38,6 +38,15 @@ from src.services.stats_service import StatsService
 logger = get_logger(__name__)
 
 
+def _truncate_id(value: str | None, max_len: int = 16) -> str | None:
+    """Truncate an ID string for logging, adding '...' if actually truncated."""
+    if value is None:
+        return None
+    if len(value) <= max_len:
+        return value
+    return value[:max_len] + "..."
+
+
 class Orchestrator:
     """
     Main orchestrator for MARTIN trading bot.
@@ -361,8 +370,8 @@ class Orchestrator:
                     slug=saved.slug,
                     start_ts=saved.start_ts,
                     end_ts=saved.end_ts,
-                    up_token_id=saved.up_token_id[:16] + "..." if saved.up_token_id else None,
-                    down_token_id=saved.down_token_id[:16] + "..." if saved.down_token_id else None,
+                    up_token_id=_truncate_id(saved.up_token_id),
+                    down_token_id=_truncate_id(saved.down_token_id),
                 )
                 
                 # Create trade for this window
@@ -572,7 +581,7 @@ class Orchestrator:
                 reason="LATE",
                 confirm_ts=confirm_ts,
                 window_end_ts=window.end_ts,
-                time_deficit=confirm_ts - window.end_ts,
+                seconds_past_deadline=confirm_ts - window.end_ts,
             )
             self._state_machine.on_cap_late(trade)
             return None
@@ -693,7 +702,7 @@ class Orchestrator:
                     cycle_id=cycle_id,
                     trade_id=trade.id,
                     direction=signal.direction.value,
-                    token_id=token_id[:16] + "..." if token_id else None,
+                    token_id=_truncate_id(token_id),
                 )
         
         elif trade.status == TradeStatus.WAITING_CAP:
@@ -812,7 +821,7 @@ class Orchestrator:
                     cycle_id=cycle_id,
                     trade_id=trade.id,
                     order_id=order_id,
-                    token_id=token_id[:16] + "..." if token_id else None,
+                    token_id=_truncate_id(token_id),
                     fill_price=fill_price,
                     stake=stake,
                 )
