@@ -398,26 +398,28 @@ class TestAuthIndicatorCompatibility:
         assert hasattr(indicator, 'is_authorized')
         assert indicator.authorized == indicator.is_authorized
     
-    def test_auth_buttons_uses_defensive_getattr(self):
-        """Test that _build_auth_buttons_keyboard has defensive fallback."""
-        import inspect
-        from src.adapters.telegram.bot import TelegramHandler
+    def test_auth_indicator_authorized_false_case(self):
+        """Test PolymarketAuthIndicator .authorized property when not authorized."""
+        from src.services.status_indicator import PolymarketAuthIndicator
         
-        source = inspect.getsource(TelegramHandler._build_auth_buttons_keyboard)
+        indicator = PolymarketAuthIndicator(
+            is_authorized=False,
+            emoji="⚪",
+            label="Not Authorized",
+        )
         
-        # Should use defensive getattr pattern or try-except
-        assert "getattr" in source or "try:" in source
+        assert indicator.authorized is False
+        assert indicator.is_authorized is False
     
-    def test_start_and_status_do_not_crash_with_auth_indicator(self):
-        """Test that /start and /status handlers reference auth indicator safely."""
-        import inspect
-        from src.adapters.telegram.bot import TelegramHandler
+    def test_compute_polymarket_auth_indicator_returns_valid_object(self):
+        """Test that compute_polymarket_auth_indicator returns an object with .authorized."""
+        from src.services.status_indicator import compute_polymarket_auth_indicator
         
-        source = inspect.getsource(TelegramHandler._register_handlers)
+        # Paper mode
+        indicator = compute_polymarket_auth_indicator("paper")
+        assert hasattr(indicator, 'authorized')
+        assert indicator.authorized is False  # Paper mode is not authorized
         
-        # Commands should reference auth indicator
-        assert "_get_polymarket_auth_indicator" in source
-        
-        # Should have defensive handling
-        build_auth_source = inspect.getsource(TelegramHandler._build_auth_buttons_keyboard)
-        assert "getattr" in build_auth_source or "try:" in build_auth_source
+        # Live mode without credentials (should not crash)
+        indicator_live = compute_polymarket_auth_indicator("live")
+        assert hasattr(indicator_live, 'authorized')

@@ -1125,7 +1125,7 @@ class TelegramHandler:
             # Defensive fallback: if auth indicator fails, treat as not authorized
             try:
                 auth_indicator = self._get_polymarket_auth_indicator()
-                is_authorized = getattr(auth_indicator, 'authorized', getattr(auth_indicator, 'is_authorized', False))
+                is_authorized = auth_indicator.authorized
             except Exception as e:
                 logger.warning("Failed to get auth indicator", error=str(e))
                 is_authorized = False
