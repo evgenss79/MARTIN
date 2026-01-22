@@ -1,15 +1,15 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T22:23:00Z  
-**Version**: 1.4.0 (Guards Removed)  
+**Last Updated**: 2026-01-22T22:43:00Z  
+**Version**: 1.5.0 (Comprehensive Logging)  
 **Test Suite**: 308 tests passing
 
 ---
 
 ## 1. Executive Summary
 
-All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, and **SPEC-aligned signal detection and quality calculation**.
+All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, **SPEC-aligned signal detection and quality calculation**, and **comprehensive INFO-level orchestration logging**.
 
 | Metric | Value |
 |--------|-------|
@@ -28,6 +28,70 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | **Canonical Strategy Tests** | **28** |
 | TA Engine Tests | 19 |
 | All Passing | ✅ |
+
+---
+
+## 0.0. Comprehensive Orchestration Logging (2026-01-22)
+
+### Changes Applied
+
+Added comprehensive INFO-level logging throughout the orchestrator to enable full runtime decision traceability.
+
+**Key Principle**: "Logs must be sufficient to reconstruct the entire bot decision path."
+
+### Logging Categories Added
+
+| Category | Log Events |
+|----------|------------|
+| STARTUP | Execution mode, modules loaded, thresholds, TA confirmation |
+| CYCLE | cycle_start, cycle_skip, cycle_end, cycle_error |
+| DISCOVERY | discovery_start, discovery_summary |
+| WINDOW | window_selected, window_skip, window_processing |
+| BINANCE | klines_loading, klines_loaded, klines_error |
+| ANCHOR | anchor_resolving, anchor_resolved |
+| TA | ta_executing, ta_signal_detected |
+| QUALITY | quality_calculating, score_computed |
+| DECISION | decision_accepted, decision_rejected (with reasons) |
+| TELEGRAM | signal_sending, signal_sent, user_confirmed, user_skipped |
+| ENTRY | awaiting_confirmation, auto_confirm, logic_started, stake_calculated |
+| ORDER | order_submitted, order_filled, order_failed |
+| CAP_CHECK | cap_check_created, cap_check_passed, cap_check_failed |
+| SETTLEMENT | settlement_check, outcome_found, settlement_complete |
+
+### Decision Rejection Logging
+
+All rejections include explicit reasons with actual vs threshold values:
+- `reason=NIGHT_DISABLED` - Night autotrade not enabled
+- `reason=NO_SIGNAL` - No valid signal in window
+- `reason=LOW_QUALITY` - `actual_quality=X < required_threshold=Y`
+- `reason=LATE` - `confirm_ts=X >= window_end_ts=Y` (MG-3)
+
+### Cycle Identification
+
+Each processing cycle has a unique `cycle_id` that flows through all log events for tracing.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/services/orchestrator.py` | Added comprehensive logging |
+| `ARCHITECTURE.md` | Added "Logging Architecture" section |
+| `CHANGE_LOG.md` | Added logging entry |
+| `QA_REPORT.md` | This section |
+
+### Verification Command
+
+```bash
+# Run the bot and observe logging
+python -m src.main
+
+# Expected output pattern:
+# INFO STARTUP: MARTIN Orchestrator initializing ...
+# INFO STARTUP: Trading thresholds loaded ...
+# INFO STARTUP: TA Engine LOADED (black box - no modifications) ...
+# INFO CYCLE_START: Beginning trading cycle cycle_id=1 ...
+# INFO DISCOVERY_START: Beginning Polymarket discovery ...
+```
 
 ---
 

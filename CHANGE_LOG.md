@@ -15,6 +15,103 @@ Each entry includes:
 
 ---
 
+## 2026-01-22: Add Comprehensive INFO-Level Orchestration Logging
+
+**Change**: Added comprehensive INFO-level logging throughout the orchestrator to enable full runtime decision traceability.
+
+**Details**:
+
+Added logging at every stage of the trading pipeline as required by the MARTIN specification:
+
+### STARTUP Logging
+- `STARTUP: MARTIN Orchestrator initializing` - execution mode, assets, window/warmup/delay settings
+- `STARTUP: Trading thresholds loaded` - price_cap, cap_min_ticks, quality thresholds
+- `STARTUP: Day/Night configuration loaded` - hours, autotrade, streaks settings
+- `STARTUP: TA Engine LOADED` - Confirmation that TA modules are loaded (black box)
+
+### CYCLE Logging
+- `CYCLE_START` - cycle_id, timestamp, pause status, policy mode, streaks
+- `CYCLE_ACTIVE` - time_mode active for processing
+- `CYCLE_SKIP` - reason for skipping (paused, day-only, night-only)
+- `CYCLE_END` - successful completion
+- `CYCLE_ERROR` - exception handling with traceback
+
+### DISCOVERY Logging
+- `DISCOVERY_START` - assets, current timestamp
+- `DISCOVERY_SUMMARY` - total windows discovered
+- `WINDOW_SELECTED` - new window details (asset, slug, token IDs)
+- `WINDOW_SKIP` - existing window skipped
+
+### PER-WINDOW Pipeline Logging
+- `WINDOW_PROCESSING` - Starting signal pipeline
+- `TRADE_CREATED` - Trade record initialized
+- `BINANCE_KLINES_LOADING` - Fetching 1m and 5m candles
+- `BINANCE_KLINES_LOADED` - Candle counts
+- `ANCHOR_RESOLVING` - Starting anchor resolution
+- `ANCHOR_RESOLVED` - Anchor price determined
+- `TA_EXECUTING` - Running signal detection
+- `TA_SIGNAL_DETECTED` - Signal found with direction, timestamp, price
+- `QUALITY_CALCULATING` - Computing quality score
+- `SCORE_COMPUTED` - Complete quality breakdown (edge, ADX, slope, trend)
+
+### DECISION Logging
+- `DECISION_ACCEPTED` - Signal passed all quality gates
+- `DECISION_REJECTED` - With explicit reasons:
+  - `reason=NIGHT_DISABLED`
+  - `reason=NO_SIGNAL`
+  - `reason=LOW_QUALITY` (with actual vs threshold values)
+  - `reason=LATE` (MG-3 timing violation)
+
+### TELEGRAM Logging
+- `TELEGRAM_SIGNAL_SENDING` - Sending trade card
+- `TELEGRAM_SIGNAL_SENT` - Card sent to user
+- `TELEGRAM_USER_CONFIRMED` - User OK received
+- `TELEGRAM_USER_SKIPPED` - User SKIP received
+
+### ENTRY Logging
+- `ENTRY_AWAITING_CONFIRMATION` - Waiting for user (Day mode)
+- `ENTRY_AUTO_CONFIRM` - Auto-confirming (Night mode)
+- `ENTRY_LOGIC_STARTED` - Beginning order execution
+- `ENTRY_STAKE_CALCULATED` - Stake amount determined
+- `ORDER_SUBMITTED` - Order placed successfully
+- `ORDER_FILLED` - Order execution complete
+- `ORDER_FAILED` - Order placement failed
+
+### CAP CHECK Logging
+- `CONFIRM_TIME_REACHED` - Starting CAP check
+- `CAP_CHECK_CREATED` - CAP check initialized
+- `CAP_CHECK_PASSED` - Price cap validated
+- `CAP_CHECK_FAILED` - Price cap validation failed
+- `CAP_CHECK_LATE` - CAP check too late
+
+### SETTLEMENT Logging
+- `SETTLEMENT_CHECK` - Checking pending settlements
+- `SETTLEMENT_OUTCOME_FOUND` - Market outcome resolved
+- `SETTLEMENT_COMPLETE` - Trade settled with result
+- `SETTLEMENT_FAILED` - Settlement error
+
+### Implementation Notes
+- Added `_cycle_counter` for unique cycle identification
+- Updated method signatures to pass `cycle_id` through pipeline
+- Changed `logger.error` to `logger.exception` for full tracebacks
+- All logging uses INFO level for terminal visibility
+
+**Reason**: Enable full runtime decision traceability as specified in the MARTIN problem statement. Logs are sufficient to reconstruct the entire bot decision path.
+
+**Behavior Changed**: No (logging only, no logic changes)
+
+**TA Logic Preserved**: ZERO changes to:
+- Signal detection logic
+- Quality calculation formulas
+- Indicator calculations
+- Scoring algorithms
+
+**Files Modified**:
+- `src/services/orchestrator.py`: Added comprehensive logging throughout pipeline
+- `CHANGE_LOG.md`: This entry
+
+---
+
 ## 2026-01-22: Remove TA Data Sufficiency Guards
 
 **Change**: Removed the data sufficiency guards (120/60/idx5>=55) from TA Engine.

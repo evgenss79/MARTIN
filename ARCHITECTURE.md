@@ -433,5 +433,56 @@ They must NOT:
 
 ---
 
+## Logging Architecture
+
+MARTIN implements comprehensive INFO-level logging throughout the orchestration pipeline. All logs are structured with prefixed categories for easy filtering and analysis.
+
+### Log Categories
+
+| Prefix | Phase | Description |
+|--------|-------|-------------|
+| `STARTUP:` | Initialization | Bot startup, config loading, module initialization |
+| `CYCLE_*` | Main Loop | Cycle start/end, skip reasons, errors |
+| `DISCOVERY_*` | Market Discovery | Polymarket market discovery via Gamma API |
+| `WINDOW_*` | Window Processing | Window selection and deduplication |
+| `BINANCE_*` | Data Fetching | 1m and 5m candle data loading |
+| `ANCHOR_*` | Reference Price | Anchor/reference price resolution |
+| `TA_*` | Signal Detection | TA engine signal detection (black box) |
+| `QUALITY_*` | Quality Scoring | Quality calculation (black box) |
+| `SCORE_*` | Score Output | Quality breakdown output |
+| `DECISION_*` | Decision Making | ACCEPTED or REJECTED with reasons |
+| `TELEGRAM_*` | User Interaction | Signal cards, confirmations |
+| `ENTRY_*` | Order Entry | Confirmation and execution flow |
+| `ORDER_*` | Order Execution | Order placement results |
+| `CAP_*` | CAP Check | Price cap validation |
+| `SETTLEMENT_*` | Settlement | Trade settlement and PnL |
+
+### Key Log Events for Decision Tracing
+
+The following events enable full reconstruction of bot decisions:
+
+1. **CYCLE_START**: Marks beginning of each 60-second processing cycle with unique `cycle_id`
+2. **DECISION_ACCEPTED**: Signal passed all gates, proceeding to trade
+3. **DECISION_REJECTED**: Signal rejected with explicit reason:
+   - `reason=NIGHT_DISABLED`: Night autotrade not enabled
+   - `reason=NO_SIGNAL`: No valid signal detected
+   - `reason=LOW_QUALITY`: Quality below threshold (includes actual vs required)
+   - `reason=LATE`: Signal confirm_ts >= window end_ts (MG-3 violation)
+4. **SCORE_COMPUTED**: Full quality breakdown (edge, ADX, slope, trend multiplier)
+5. **ORDER_SUBMITTED/ORDER_FAILED**: Execution result
+6. **SETTLEMENT_COMPLETE**: Final trade outcome
+
+### Logging Configuration
+
+Log level is configurable via:
+- `config/config.json`: `app.log_level` (default: "INFO")
+- Environment: `LOG_LEVEL` override
+
+Log format:
+- `config/config.json`: `app.log_format` (default: "json")
+- Options: "json" (structured) or "text" (human-readable)
+
+---
+
 *This file is the authoritative architecture reference for project MARTIN.*
-*Last updated: 2026-01-21*
+*Last updated: 2026-01-22*
