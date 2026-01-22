@@ -1,19 +1,19 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T21:00:00Z  
-**Version**: 1.2.0 (Spec-Aligned Signal Detection & Quality)  
-**Test Suite**: 308 tests passing
+**Last Updated**: 2026-01-22T21:50:00Z  
+**Version**: 1.3.0 (Data Sufficiency Guards)  
+**Test Suite**: 316 tests passing
 
 ---
 
 ## 1. Executive Summary
 
-All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, and **SPEC-aligned signal detection and quality calculation**.
+All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, **SPEC-aligned signal detection and quality calculation**, and **explicit data sufficiency guards**.
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 308 |
+| Total Tests | 316 |
 | Unit Tests | 140 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -27,11 +27,59 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | Status Indicator Tests | 16 |
 | **Canonical Strategy Tests** | **28** |
 | TA Engine Tests | 19 |
+| **Data Sufficiency Guard Tests** | **8** |
 | All Passing | ✅ |
 
 ---
 
-## 0. Spec-Aligned Signal Detection & Quality (2026-01-22) — CORRECTION
+## 0.1. Data Sufficiency Guards (2026-01-22) — BEHAVIORAL FIX
+
+### Purpose
+
+Implement explicit data sufficiency guards in the TA Engine to ensure deterministic
+behavior when insufficient historical data is available. This is a behavioral guarding
+task, not a strategy change.
+
+### Guards Implemented
+
+**1m Candles Guard (Signal Detection)**:
+- If `len(candles_1m) < 120`: Return None immediately
+- No logging, no partial signal
+- This is a hard gate, not a fallback
+
+**5m Candles Guard (Quality Calculation)**:
+- If `len(candles_5m) < 60` OR `idx5 < 55`:
+  - Force `q_adx = 0.0`
+  - Force `q_slope = 0.0`
+  - Force `trend_mult = 1.0`
+- No partial calculations allowed
+
+### New Tests Added
+
+| Test | Purpose | Regression Prevention |
+|------|---------|----------------------|
+| `test_no_signal_when_1m_candles_less_than_120` | Verify signal returns None with <120 candles | Prevents false signals with insufficient EMA warmup |
+| `test_no_signal_when_1m_candles_far_below_threshold` | Verify behavior with very few candles | Prevents crashes or partial signals |
+| `test_signal_possible_when_1m_candles_at_120` | Verify guard threshold is exactly 120 | Prevents threshold drift |
+| `test_signal_possible_when_1m_candles_above_120` | Verify normal operation above threshold | Prevents over-aggressive guarding |
+| `test_quality_forced_zero_when_5m_candles_less_than_60` | Verify quality components zeroed with <60 candles | Prevents invalid ADX/slope calculations |
+| `test_quality_forced_zero_when_idx5_less_than_55` | Verify quality components zeroed when idx5 <55 | Prevents out-of-bounds errors |
+| `test_quality_computed_when_guards_satisfied` | Verify normal computation when guards pass | Prevents over-aggressive guarding |
+| `test_quality_constants_match_spec` | Verify guard thresholds match specification | Prevents configuration drift |
+
+### What Was NOT Changed
+
+- Signal detection logic
+- Quality formula
+- Indicator periods
+- Weights (1.0 / 0.2 / 0.2)
+- Penalty logic
+- Trend bonus/penalty values
+- Timeframe assignments
+
+---
+
+## 0.2. Spec-Aligned Signal Detection & Quality (2026-01-22) — CORRECTION
 
 ### Changes Applied
 

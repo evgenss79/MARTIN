@@ -200,6 +200,12 @@ class TAEngine:
     ADX_PERIOD = 14                 # ADX calculation period
     EMA50_SLOPE_BARS = 6            # Bars for EMA50 slope calculation
     
+    # DATA SUFFICIENCY GUARDS (NON-NEGOTIABLE)
+    # These thresholds ensure deterministic behavior with insufficient data
+    MIN_1M_CANDLES_FOR_SIGNAL = 120  # Minimum 1m candles for signal detection
+    MIN_5M_CANDLES_FOR_QUALITY = 60  # Minimum 5m candles for quality components
+    MIN_IDX5_FOR_QUALITY = 55        # Minimum idx5 for quality components
+    
     def __init__(
         self,
         adx_period: int = 14,
@@ -249,6 +255,10 @@ class TAEngine:
         - close_1m[i+1] < ema20_1m[i+1]  (next bar confirms)
         If true: direction=DOWN, signal_ts=ts_1m[i+1], signal_price=close_1m[i+1]
         
+        DATA SUFFICIENCY GUARD:
+        If available 1m candles < 120: Return None immediately.
+        This is a hard gate, not a fallback. No logging, no partial signal.
+        
         Args:
             candles_1m: 1-minute candles (including warmup)
             start_ts: Window start timestamp (anchor bar is first candle >= start_ts)
@@ -256,8 +266,9 @@ class TAEngine:
         Returns:
             SignalResult if signal found, None otherwise
         """
-        if len(candles_1m) < 22:  # Need at least 20 for EMA + 2 for signal
-            logger.warning("Insufficient candles for signal detection", count=len(candles_1m))
+        # DATA SUFFICIENCY GUARD: Require at least 120 1m candles
+        # This is a hard gate - return None without logging or partial signal
+        if len(candles_1m) < self.MIN_1M_CANDLES_FOR_SIGNAL:
             return None
         
         # Calculate EMA20 on close prices
@@ -353,6 +364,11 @@ class TAEngine:
         C3) q_slope = 1000 * abs(slope50 / close_5m[idx5])
         C4) trend_mult = TREND_BONUS if confirms, TREND_PENALTY if opposes
         
+        DATA SUFFICIENCY GUARD:
+        If len(candles_5m) < 60 OR idx5 < 55:
+        Force q_adx=0.0, q_slope=0.0, trend_mult=1.0
+        No partial calculations are allowed.
+        
         Args:
             signal: SignalResult from detect_signal
             candles_5m: 5-minute candles (for ADX, EMA50 slope, trend confirmation)
@@ -393,9 +409,33 @@ class TAEngine:
         if idx5 < 0:
             idx5 = len(candles_5m) - 1
         
-        if idx5 < 0 or len(candles_5m) == 0:
-            logger.warning("No 5m candles available for quality calculation")
-            breakdown.final_quality = edge_component * self.W_ANCHOR
+        # DATA SUFFICIENCY GUARD for 5m candles
+        # If len(candles_5m) < 60 OR idx5 < 55:
+        # Force q_adx=0.0, q_slope=0.0, trend_mult=1.0
+        # No partial calculations are allowed
+        insufficient_5m_data = (
+            len(candles_5m) < self.MIN_5M_CANDLES_FOR_QUALITY or
+            idx5 < self.MIN_IDX5_FOR_QUALITY
+        )
+        
+        if insufficient_5m_data:
+            # Force zero for all 5m-based components
+            breakdown.q_adx = 0.0
+            breakdown.adx_value = 0.0
+            breakdown.q_slope = 0.0
+            breakdown.ema50_slope = 0.0
+            breakdown.trend_mult = self.TREND_NEUTRAL
+            breakdown.trend_confirms = None
+            breakdown.insufficient_5m_data = True
+            
+            # Calculate final quality with only anchor component
+            breakdown.w_anchor = self.W_ANCHOR * edge_component
+            breakdown.w_adx = 0.0
+            breakdown.w_slope = 0.0
+            
+            base_quality = self.W_ANCHOR * edge_component
+            breakdown.final_quality = base_quality * self.TREND_NEUTRAL
+            
             return breakdown
         
         # Extract price series from 5m candles

@@ -81,6 +81,9 @@ class QualityBreakdown:
     w_adx: float = 0.0
     w_slope: float = 0.0
     
+    # Data sufficiency flag
+    insufficient_5m_data: bool = False
+    
     final_quality: float = 0.0
     
     def to_dict(self) -> dict[str, Any]:
@@ -100,6 +103,7 @@ class QualityBreakdown:
             "w_anchor": self.w_anchor,
             "w_adx": self.w_adx,
             "w_slope": self.w_slope,
+            "insufficient_5m_data": self.insufficient_5m_data,
             "final_quality": self.final_quality,
         }
     
