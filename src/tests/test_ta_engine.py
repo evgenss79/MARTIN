@@ -393,6 +393,9 @@ class TestQualityCalculation:
         expected_quality = expected_base * q.trend_mult
         
         # Final quality should match canonical formula
+        # Tolerance of 0.01 accounts for floating point precision in chain of
+        # multiplications (4 operations). IEEE 754 double precision has ~15 digits,
+        # so 0.01 provides ample margin while catching any formula deviations.
         assert abs(q.final_quality - expected_quality) < 0.01
 
 

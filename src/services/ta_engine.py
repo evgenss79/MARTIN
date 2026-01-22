@@ -279,8 +279,10 @@ class TAEngine:
                 anchor_idx = i
                 break
         
+        # Need at least 2 more bars after anchor for crossover detection:
+        # bar-3 (crossover), bar-2 (first confirm), bar-1 (signal bar)
         if anchor_idx < 0 or anchor_idx >= len(candles_1m) - 2:
-            logger.warning("Could not find anchor bar", start_ts=start_ts)
+            logger.warning("Could not find anchor bar with sufficient data for crossover detection", start_ts=start_ts)
             return None
         
         anchor_bar = candles_1m[anchor_idx]
