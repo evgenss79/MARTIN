@@ -1,9 +1,9 @@
 # QA Report - MARTIN Telegram Trading Bot
 
 **Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T14:35:00Z  
-**Version**: 1.0.2 (Telegram Settings + Commands Fix)  
-**Test Suite**: 239+ tests passing
+**Last Updated**: 2026-01-22T16:30:00Z  
+**Version**: 1.0.3 (Gamma Discovery Fix)  
+**Test Suite**: 267 tests passing
 
 ---
 
@@ -13,7 +13,7 @@ All production-like QA verification has been completed successfully. The MARTIN 
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 239+ |
+| Total Tests | 267 |
 | Unit Tests | 137 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -22,7 +22,8 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | E2E Integration Night | 11 |
 | E2E Edge Cases | 14 |
 | Consolidated E2E | 9 |
-| Telegram Handler Tests | 27 (was 14) |
+| Telegram Handler Tests | 27 |
+| Gamma Discovery Tests | 28 (NEW) |
 | All Passing | ✅ |
 
 ---
@@ -40,12 +41,77 @@ The following test files exist and are committed:
 | `test_e2e_night_flow.py` | `src/tests/test_e2e_night_flow.py` | ✅ EXISTS |
 | `test_e2e_edge_cases.py` | `src/tests/test_e2e_edge_cases.py` | ✅ EXISTS |
 | `test_e2e_integration.py` | `src/tests/test_e2e_integration.py` | ✅ EXISTS |
-| `test_telegram_handlers.py` | `src/tests/test_telegram_handlers.py` | ✅ EXISTS (NEW) |
+| `test_telegram_handlers.py` | `src/tests/test_telegram_handlers.py` | ✅ EXISTS |
+| `test_gamma_discovery.py` | `src/tests/test_gamma_discovery.py` | ✅ EXISTS (NEW) |
 | `QA_REPORT.md` | Repository root | ✅ EXISTS |
 
 ---
 
-## 1.2 Telegram UX Fixes (2026-01-22)
+## 1.2 Gamma Discovery Fix (2026-01-22)
+
+### Issue Resolved
+
+**Problem**: Market discovery returned ZERO hourly "up or down" markets for BTC/ETH despite Gamma API returning valid data.
+
+**Root Cause**: The Gamma API `/public-search` endpoint returns an `events[]` array with nested `markets[]` per event. Previous code used `response.get("markets", [])` which only looked at top-level markets, missing the nested ones.
+
+### Fixes Applied
+
+1. **Event-Driven Parsing**
+   - Now extracts markets from BOTH top-level and nested event markets
+   - Propagates event-level data (timestamps, titles) to markets for fallback
+
+2. **Market-Level Filtering**
+   - Filters by title/question containing "up or down", "up/down", or "updown"
+   - Uses regex patterns for robust case-insensitive matching
+   - Verifies asset symbol (BTC, ETH) or name (Bitcoin, Ethereum) in text
+
+3. **Timestamp Fallback**
+   - Market-level fields: endDate, closeTime, resolvedAt
+   - Event-level fallback: _event_end_date
+   - Configurable grace periods and forward horizons
+
+4. **Diagnostic Logging**
+   - Events scanned, markets scanned counts
+   - Title matches before/after time filter
+   - Sample market titles for debugging
+
+### Verification Commands
+
+```bash
+# Run Gamma discovery tests
+python -m pytest src/tests/test_gamma_discovery.py -v
+
+# Verify pattern matching
+grep -A5 "UP_OR_DOWN_PATTERNS" src/adapters/polymarket/gamma_client.py
+
+# Verify event parsing
+grep -A10 "events = response.get" src/adapters/polymarket/gamma_client.py
+```
+
+### Expected Runtime Logs (Successful Discovery)
+
+```
+INFO  Gamma search results query="BTC up or down" events_count=5 top_level_markets=0 nested_markets=12 total_markets=12
+INFO  Gamma discovery complete assets=["BTC", "ETH"] events_scanned=10 markets_scanned=24 title_matches_before_time_filter=8 markets_after_time_filter=4 final_windows=4
+INFO  Discovered market asset="BTC" slug="btc-up-or-down-hourly-xxx" start_ts=1706000000 end_ts=1706003600 time_remaining=2345
+```
+
+### Expected Runtime Logs (Zero Markets - Now Fixed)
+
+If you still see zero markets after this fix, check:
+```
+WARN  No hourly markets discovered assets=["BTC", "ETH"] total_events=0 total_markets=0 hint="Check Gamma API response structure or filter criteria"
+```
+
+This indicates the Gamma API returned no events, which could mean:
+- API endpoint changed
+- Query format changed
+- Network connectivity issue
+
+---
+
+## 1.4 Telegram UX Fixes (2026-01-22)
 
 ### Issues Fixed
 
@@ -54,12 +120,7 @@ The following test files exist and are committed:
    - Root Cause: `callback.answer()` was called at END of handler, after slow work
    - Fix: Move `callback.answer()` to FIRST LINE, immediately on callback receipt
 
-2. **Gamma Market Discovery**
-   - Problem: Returns 0 markets for hourly BTC/ETH
-   - Root Cause: Query string included "hourly" (wrong)
-   - Fix: Remove "hourly" from q param, keep `recurrence=hourly` as separate param
-
-3. **Auth Buttons Missing**
+2. **Auth Buttons Missing**
    - Problem: No authorization UI in Telegram
    - Fix: Added auth buttons to /start and /status commands
 
@@ -70,9 +131,8 @@ The following test files exist and are committed:
 grep -A5 "async def handle_callback" src/adapters/telegram/bot.py | head -10
 # Should show: await callback.answer() as first await
 
-# 2. Test Gamma query format
+# 2. Test Gamma query format (see section 1.2)
 grep "up or down" src/adapters/polymarket/gamma_client.py
-# Should NOT include "hourly" in the query string
 
 # 3. Test auth buttons exist
 grep "auth_authorize\|auth_logout" src/adapters/telegram/bot.py
