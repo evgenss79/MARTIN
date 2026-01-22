@@ -1,0 +1,29 @@
+# MARTIN Telegram Trading Bot - Dependencies
+
+# Async HTTP client
+httpx>=0.25.0
+
+# Telegram bot framework
+aiogram>=3.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# JSON schema validation
+jsonschema>=4.0.0
+
+# Ethereum wallet signing (for live trading)
+eth-account>=0.10.0
+
+# Cryptography (for encrypted secrets at rest)
+cryptography>=41.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Type checking (dev)
+# mypy>=1.0.0
+
+# Timezone support (Python 3.9+)
+# tzdata  # Only needed on Windows

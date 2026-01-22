@@ -1,0 +1,318 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MARTIN Configuration Schema",
+  "description": "Configuration schema for MARTIN Telegram trading bot",
+  "type": "object",
+  "required": ["app", "trading", "day_night", "ta", "apis", "telegram", "storage", "risk", "execution"],
+  "properties": {
+    "app": {
+      "type": "object",
+      "required": ["timezone", "log_level"],
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "description": "Timezone for day/night determination",
+          "default": "Europe/Zurich"
+        },
+        "log_level": {
+          "type": "string",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
+          "default": "INFO"
+        },
+        "log_format": {
+          "type": "string",
+          "enum": ["json", "text"],
+          "default": "json"
+        }
+      }
+    },
+    "trading": {
+      "type": "object",
+      "required": ["assets", "window_seconds", "price_cap", "confirm_delay_seconds", "cap_min_ticks"],
+      "properties": {
+        "assets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of assets to trade (BTC, ETH)",
+          "minItems": 1
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "description": "Market window duration in seconds",
+          "default": 3600
+        },
+        "price_cap": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 1.0,
+          "description": "Maximum price for CAP_PASS"
+        },
+        "confirm_delay_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Delay after signal_ts before CAP check"
+        },
+        "cap_min_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Minimum consecutive ticks <= price_cap for CAP_PASS"
+        }
+      }
+    },
+    "day_night": {
+      "type": "object",
+      "required": [
+        "day_start_hour", "day_end_hour",
+        "base_day_min_quality", "base_night_min_quality",
+        "switch_streak_at",
+        "strict_day_q", "strict_night_q",
+        "night_max_win_streak", "night_autotrade_enabled"
+      ],
+      "properties": {
+        "day_start_hour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23,
+          "description": "Day mode start hour (local timezone)"
+        },
+        "day_end_hour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23,
+          "description": "Day mode end hour (local timezone)"
+        },
+        "base_day_min_quality": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum quality for day mode (BASE)"
+        },
+        "base_night_min_quality": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum quality for night mode (BASE)"
+        },
+        "switch_streak_at": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Win streak count to switch to STRICT mode"
+        },
+        "strict_day_q": {
+          "type": "string",
+          "enum": ["p90", "p95", "p97", "p99"],
+          "description": "Quantile for STRICT day threshold"
+        },
+        "strict_night_q": {
+          "type": "string",
+          "enum": ["p90", "p95", "p97", "p99"],
+          "description": "Quantile for STRICT night threshold"
+        },
+        "night_max_win_streak": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Max wins in night session before reset"
+        },
+        "night_autotrade_enabled": {
+          "type": "boolean",
+          "description": "Enable autonomous night trading"
+        },
+        "night_session_resets_trade_streak": {
+          "type": "boolean",
+          "description": "Whether night session reset also resets trade_level_streak",
+          "default": true
+        }
+      }
+    },
+    "ta": {
+      "type": "object",
+      "required": [
+        "warmup_seconds", "adx_period", "ema50_slope_bars",
+        "anchor_scale", "w_anchor", "w_adx", "w_slope",
+        "trend_bonus", "trend_penalty"
+      ],
+      "properties": {
+        "warmup_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Warmup period for TA indicators"
+        },
+        "adx_period": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ADX calculation period"
+        },
+        "ema50_slope_bars": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of bars for EMA50 slope calculation"
+        },
+        "anchor_scale": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Scaling factor for anchor edge component"
+        },
+        "w_anchor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight for anchor edge component"
+        },
+        "w_adx": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight for ADX component"
+        },
+        "w_slope": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weight for slope component"
+        },
+        "trend_bonus": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Multiplier when trend confirms signal"
+        },
+        "trend_penalty": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Multiplier when trend opposes signal"
+        }
+      }
+    },
+    "apis": {
+      "type": "object",
+      "required": ["gamma", "clob", "binance"],
+      "properties": {
+        "gamma": {
+          "$ref": "#/$defs/api_config"
+        },
+        "clob": {
+          "$ref": "#/$defs/api_config"
+        },
+        "binance": {
+          "$ref": "#/$defs/api_config"
+        }
+      }
+    },
+    "telegram": {
+      "type": "object",
+      "required": ["admin_user_ids", "message_rate_limit_per_minute"],
+      "properties": {
+        "admin_user_ids": {
+          "type": "array",
+          "items": {"type": "integer"},
+          "description": "List of authorized Telegram user IDs"
+        },
+        "message_rate_limit_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum messages per minute to avoid rate limiting"
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "required": ["driver", "dsn"],
+      "properties": {
+        "driver": {
+          "type": "string",
+          "enum": ["sqlite"],
+          "description": "Storage driver type"
+        },
+        "dsn": {
+          "type": "string",
+          "description": "Database connection string"
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["stake"],
+      "properties": {
+        "stake": {
+          "type": "object",
+          "required": ["mode", "base_amount_usdc"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["fixed"],
+              "description": "Stake calculation mode"
+            },
+            "base_amount_usdc": {
+              "type": "number",
+              "minimum": 0.01,
+              "description": "Base stake amount in USDC"
+            }
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["paper", "live"],
+          "description": "Execution mode (paper=simulated, live=real orders)"
+        }
+      }
+    },
+    "rolling_quantile": {
+      "type": "object",
+      "properties": {
+        "rolling_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14,
+          "description": "Number of days for rolling quantile window"
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 500,
+          "description": "Maximum samples for quantile calculation"
+        },
+        "min_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 50,
+          "description": "Minimum samples required for quantile calculation"
+        },
+        "strict_fallback_mult": {
+          "type": "number",
+          "minimum": 1,
+          "default": 1.25,
+          "description": "Fallback multiplier when insufficient samples"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "api_config": {
+      "type": "object",
+      "required": ["base_url", "timeout", "retries", "backoff"],
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backoff": {
+          "type": "number",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
