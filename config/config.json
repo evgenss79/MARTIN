@@ -16,7 +16,7 @@
     "day_start_hour": 8,
     "day_end_hour": 22,
     "base_day_min_quality": 35.0,
-    "base_night_min_quality": 38.0,
+    "base_night_min_quality": 35.0,
     "switch_streak_at": 5,
     "strict_day_q": "p90",
     "strict_night_q": "p95",
