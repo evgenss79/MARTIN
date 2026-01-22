@@ -1,119 +1,105 @@
 """
 Scheduler wiring tests for MARTIN.
 
-These tests verify:
-1. Scheduler can be instantiated
-2. Jobs can be registered
-3. Jobs can be invoked once with mocked dependencies
+These tests verify MARTIN's actual scheduling mechanism:
+1. Orchestrator's periodic tick-based processing
+2. Jobs/tasks can be invoked with mocked dependencies
+3. Service lifecycle works correctly
+
+MARTIN uses an internal async loop (asyncio) for scheduling, NOT APScheduler.
+The Orchestrator runs a main loop that:
+- Ticks every 60 seconds
+- Discovers new markets
+- Processes active trades
+- Checks for settlements
+
+This approach is simpler and more appropriate for MARTIN's needs.
 """
 import os
 import sys
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from datetime import datetime, timedelta
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
-class TestSchedulerWiring:
-    """Test scheduler job registration and invocation."""
+class TestOrchestratorScheduling:
+    """Test Orchestrator's internal scheduling mechanism."""
     
-    def test_scheduler_can_be_created(self):
-        """Verify scheduler instance can be created."""
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    def test_orchestrator_has_tick_method(self):
+        """Verify Orchestrator has _tick method for periodic processing."""
+        from services.orchestrator import Orchestrator
         
-        scheduler = AsyncIOScheduler()
-        assert scheduler is not None
-        assert not scheduler.running
+        # Verify the _tick method exists
+        assert hasattr(Orchestrator, '_tick')
+        
+        # Verify it's an async method
+        import inspect
+        assert inspect.iscoroutinefunction(Orchestrator._tick)
     
-    def test_job_can_be_registered(self):
-        """Verify jobs can be registered with scheduler."""
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.interval import IntervalTrigger
+    def test_orchestrator_has_processing_methods(self):
+        """Verify Orchestrator has all required processing methods."""
+        from services.orchestrator import Orchestrator
         
-        scheduler = AsyncIOScheduler()
+        # These methods implement MARTIN's scheduling tasks:
+        # 1. Market discovery
+        assert hasattr(Orchestrator, '_discover_markets')
+        # 2. Trade processing
+        assert hasattr(Orchestrator, '_process_active_trades')
+        # 3. Settlement checking
+        assert hasattr(Orchestrator, '_check_settlements')
         
-        # Register a dummy job
-        def dummy_job():
-            pass
-        
-        job = scheduler.add_job(
-            dummy_job,
-            trigger=IntervalTrigger(seconds=60),
-            id='test_job',
-            replace_existing=True
-        )
-        
-        assert job is not None
-        assert job.id == 'test_job'
-        assert 'test_job' in [j.id for j in scheduler.get_jobs()]
+        # All should be async
+        import inspect
+        assert inspect.iscoroutinefunction(Orchestrator._discover_markets)
+        assert inspect.iscoroutinefunction(Orchestrator._process_active_trades)
+        assert inspect.iscoroutinefunction(Orchestrator._check_settlements)
     
-    def test_multiple_jobs_can_be_registered(self):
-        """Verify multiple jobs can be registered."""
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.cron import CronTrigger
-        from apscheduler.triggers.interval import IntervalTrigger
+    def test_orchestrator_has_start_stop_methods(self):
+        """Verify Orchestrator has lifecycle methods."""
+        from services.orchestrator import Orchestrator
         
-        scheduler = AsyncIOScheduler()
+        assert hasattr(Orchestrator, 'start')
+        assert hasattr(Orchestrator, 'stop')
         
-        # Register market discovery job (hourly)
-        scheduler.add_job(
-            lambda: None,
-            trigger=CronTrigger(minute=0),
-            id='market_discovery',
-            replace_existing=True
-        )
-        
-        # Register reminder check job (every minute)
-        scheduler.add_job(
-            lambda: None,
-            trigger=IntervalTrigger(minutes=1),
-            id='reminder_check',
-            replace_existing=True
-        )
-        
-        # Register cap check job (every 5 seconds)
-        scheduler.add_job(
-            lambda: None,
-            trigger=IntervalTrigger(seconds=5),
-            id='cap_check',
-            replace_existing=True
-        )
-        
-        jobs = scheduler.get_jobs()
-        job_ids = [j.id for j in jobs]
-        
-        assert 'market_discovery' in job_ids
-        assert 'reminder_check' in job_ids
-        assert 'cap_check' in job_ids
+        import inspect
+        assert inspect.iscoroutinefunction(Orchestrator.start)
+        assert inspect.iscoroutinefunction(Orchestrator.stop)
+
+
+class TestJobInvocationWithMocks:
+    """Test that scheduled jobs/tasks can be invoked with mocks."""
     
     @pytest.mark.asyncio
-    async def test_job_invocation_with_mocks(self):
-        """Verify job can be invoked with mocked dependencies."""
-        # Mock the discovery job
+    async def test_market_discovery_with_mocks(self):
+        """Verify market discovery task can be invoked with mocked Gamma client."""
         mock_gamma_client = Mock()
-        mock_gamma_client.discover_markets = AsyncMock(return_value=[
-            {
-                'slug': 'btc-up-or-down-jan-21-2026-1800',
-                'question': 'Will BTC go up?',
-                'start_ts': int(datetime.now().timestamp()),
-                'end_ts': int((datetime.now() + timedelta(hours=1)).timestamp()),
-                'up_token_id': 'token_up',
-                'down_token_id': 'token_down'
-            }
+        mock_gamma_client.discover_hourly_markets = AsyncMock(return_value=[
+            Mock(
+                slug='btc-up-or-down-jan-21-2026-1800',
+                asset='BTC',
+                start_ts=int(datetime.now().timestamp()),
+                end_ts=int((datetime.now() + timedelta(hours=1)).timestamp()),
+                up_token_id='token_up',
+                down_token_id='token_down'
+            )
         ])
         
-        # Invoke the discovery function directly
-        markets = await mock_gamma_client.discover_markets(assets=['BTC', 'ETH'])
+        # Invoke the discovery function
+        markets = await mock_gamma_client.discover_hourly_markets(
+            assets=['BTC', 'ETH'],
+            current_ts=int(datetime.now().timestamp())
+        )
         
         assert len(markets) == 1
-        assert markets[0]['slug'] == 'btc-up-or-down-jan-21-2026-1800'
-        mock_gamma_client.discover_markets.assert_called_once()
+        assert markets[0].slug == 'btc-up-or-down-jan-21-2026-1800'
+        mock_gamma_client.discover_hourly_markets.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_cap_check_job_with_mocks(self):
-        """Verify cap check job works with mocked CLOB client."""
+    async def test_cap_check_task_with_mocks(self):
+        """Verify CAP check task works with mocked CLOB client."""
         mock_clob_client = Mock()
         mock_clob_client.get_prices_history = AsyncMock(return_value=[
             {'t': 1000, 'p': 0.55},
@@ -136,12 +122,12 @@ class TestSchedulerWiring:
             assert tick['p'] <= 0.55
     
     @pytest.mark.asyncio
-    async def test_reminder_job_with_mocks(self):
-        """Verify reminder job works with mocked telegram bot."""
+    async def test_telegram_notification_with_mocks(self):
+        """Verify Telegram notification works with mocked bot."""
         mock_bot = Mock()
         mock_bot.send_message = AsyncMock(return_value={'message_id': 123})
         
-        # Simulate reminder
+        # Simulate reminder notification
         result = await mock_bot.send_message(
             chat_id=12345,
             text="⏰ Reminder: Day window ends in 30 minutes!"

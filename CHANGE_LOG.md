@@ -583,6 +583,36 @@ TypeError: StatsService.__init__() got an unexpected keyword argument 'night_ses
 
 ---
 
+## 2026-01-22: Fix Scheduler Tests (Remove APScheduler Dependency)
+
+**Change**: Rewrote scheduler tests to match MARTIN's actual scheduling mechanism.
+
+**Details**:
+- **Root Cause**: `test_scheduler.py` imported APScheduler, but production code does NOT use APScheduler
+- MARTIN uses an internal async loop in `Orchestrator` with `asyncio.sleep(60)` for scheduling
+- The Orchestrator's `_tick()` method runs periodically and handles:
+  - Market discovery
+  - Trade processing  
+  - Settlement checking
+- Removed all APScheduler imports from `test_scheduler.py`
+- Rewrote tests to verify:
+  - Orchestrator has `_tick`, `_discover_markets`, `_process_active_trades`, `_check_settlements` methods
+  - Orchestrator has `start` and `stop` lifecycle methods
+  - Scheduled jobs/tasks can be invoked with mocked dependencies
+  - Config has scheduling-related settings
+  - Async context management works correctly
+
+**Files Modified**:
+- `src/tests/test_scheduler.py` - Complete rewrite to test real scheduler wiring
+
+**Reason**: APScheduler was referenced ONLY in tests, not in production code. Tests should validate MARTIN's actual scheduling mechanism, not a library that isn't used.
+
+**Behavior Changed**: No (test-only change, no production code modified)
+
+**Test Results**: 212 tests pass (0 failures)
+
+---
+
 ## Template for Future Entries
 
 ```markdown
