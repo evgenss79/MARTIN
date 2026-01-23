@@ -9,6 +9,7 @@ This worker runs periodically (e.g., every 10-60s) to:
 - Provide fresh candle data for SEARCHING_SIGNAL trades
 """
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -157,7 +158,6 @@ class TASnapshotWorker:
         
         while self._running:
             await self._update_all_snapshots()
-            import asyncio
             await asyncio.sleep(self._interval_seconds)
     
     async def stop(self) -> None:
