@@ -15,6 +15,129 @@ Each entry includes:
 
 ---
 
+## 2026-01-23: Add SEARCHING_SIGNAL Status + In-Window Signal Scanning + Dual-Loop Architecture
+
+**Change**: Major orchestration update implementing continuous signal scanning within active windows.
+
+**Details**:
+
+### A) New TradeStatus: SEARCHING_SIGNAL
+
+Added new status in `src/domain/enums.py`:
+- `SEARCHING_SIGNAL = "SEARCHING_SIGNAL"`
+- Represents active signal scanning within a window
+- Transitions: `NEW → SEARCHING_SIGNAL → SIGNALLED` (or `→ CANCELLED`)
+
+Updated state machine transitions in `src/services/state_machine.py`:
+- `on_start_signal_search()` method for `NEW → SEARCHING_SIGNAL`
+- `SEARCHING_SIGNAL` can transition to `SIGNALLED` or `CANCELLED`
+
+### B) Continuous In-Window Signal Scanning (Defect A Fix)
+
+Problem: TA was evaluated only once at window creation. Signals appearing later were missed.
+
+Solution in `src/services/orchestrator.py`:
+- New `_scan_searching_signal_trades()` method called each tick
+- Each `SEARCHING_SIGNAL` trade re-evaluates TA every 60 seconds
+- If signal found with quality < threshold → remain `SEARCHING_SIGNAL`
+- If signal found with quality >= threshold → transition to `SIGNALLED`
+- If window expires → transition to `CANCELLED`
+
+### C) Dual-Loop Architecture (Defect B Fix)
+
+Problem: TA context was not maintained independently of Polymarket windows.
+
+Solution in `src/jobs/ta_snapshot_worker.py`:
+- **PRIMARY LOOP**: TASnapshotWorker runs every 30 seconds
+- Maintains cached candle data for all configured assets
+- Provides fresh TA context for signal scanning
+- **PARALLEL LOOP**: Orchestrator runs every 60 seconds
+- Uses snapshot cache for SEARCHING_SIGNAL scanning
+
+### D) Trade Creation for Existing Active Windows
+
+Problem: If window exists but no trade, bot skipped it.
+
+Solution:
+- Added `get_non_terminal_by_window_id()` to TradeRepository
+- Discovery now creates trades for existing active windows without non-terminal trades
+- Logging: `TRADE_CREATED_FOR_EXISTING_WINDOW`
+
+### E) Day Mode Auto-Skip for Unresponsive Signals (Defect C Fix)
+
+Problem: Day trades lingered until EXPIRED when user didn't respond.
+
+Solution:
+- Added `max_response_seconds` configuration (default: 600s)
+- In `_handle_ready_trade()`: if no response after timeout, auto-skip
+- Logging: `DAY_NO_RESPONSE_SKIP`
+
+### F) Configurable Strictness Increment (Defect G Fix)
+
+Problem: Threshold adjustment for streak goals not configurable.
+
+Solution:
+- Added `start_strict_after_n_wins` configuration
+- Added `strict_quality_increment` configuration
+- Formula: `threshold = base + max(0, wins - start + 1) * increment`
+- Supports 10+ win series goal
+
+### G) New Repository Methods
+
+Added to `src/adapters/storage/repositories.py`:
+- `get_non_terminal_by_window_id(window_id)` - prevents duplicate trades
+- `get_searching_signal_trades()` - gets all trades needing signal scan
+
+### H) Regression Tests
+
+Added `src/tests/test_searching_signal_flow.py` with 22 tests:
+- SEARCHING_SIGNAL status validation
+- State machine transition tests
+- Signal scanning behavior tests
+- Quality gating tests
+- Repository method tests
+- Day mode auto-skip tests
+- Strictness increment tests
+
+### I) Logging Categories Added
+
+- `TA_WORKER_START` / `TA_SNAPSHOT_UPDATED`
+- `SEARCHING_SIGNAL_SCAN` / `SEARCHING_SIGNAL_TICK`
+- `SIGNAL_DETECTED` / `QUALITY_COMPUTED`
+- `DECISION_REJECTED_LOW_QUALITY` / `DECISION_ACCEPTED_SIGNALLED`
+- `TRADE_CREATED_FOR_EXISTING_WINDOW` / `TRADE_DEDUPED`
+- `DAY_NO_RESPONSE_SKIP`
+
+**Reason**: Fix defects A, B, C, G as specified in owner requirements. Align bot architecture with owner's intended runtime logic.
+
+**Behavior Changed**: Yes
+- Trades now start in SEARCHING_SIGNAL (not immediate signal detection)
+- Signal detection happens continuously within window
+- Better signals can appear later and be captured
+- Day mode auto-skips unresponsive trades
+
+**TA Logic Preserved**: ZERO changes to:
+- Signal detection formula (EMA20 1m touch + 2-bar confirm)
+- Quality calculation formula (SPEC weights)
+- Indicator calculations
+- TA is BLACK BOX
+
+**Files Modified**:
+- `src/domain/enums.py`: Added SEARCHING_SIGNAL status
+- `src/services/state_machine.py`: Added transitions + on_start_signal_search()
+- `src/services/orchestrator.py`: Dual-loop, signal scanning, auto-skip
+- `src/adapters/storage/repositories.py`: New repository methods
+- `src/jobs/ta_snapshot_worker.py`: NEW - TA snapshot cache
+- `src/tests/test_searching_signal_flow.py`: NEW - 22 regression tests
+- `STATE_MACHINE.md`: Updated with SEARCHING_SIGNAL
+- `ARCHITECTURE.md`: Added dual-loop architecture section
+- `DATA_CONTRACTS.md`: Updated status enum
+- `CHANGE_LOG.md`: This entry
+
+**Tests**: 330 passing (308 existing + 22 new)
+
+---
+
 ## 2026-01-22: Add Comprehensive INFO-Level Orchestration Logging
 
 **Change**: Added comprehensive INFO-level logging throughout the orchestrator to enable full runtime decision traceability.

@@ -215,6 +215,31 @@ class TradeRepository:
         row = self._db.fetchone("SELECT * FROM trades WHERE window_id = ?", (window_id,))
         return self._row_to_model(row) if row else None
     
+    def get_non_terminal_by_window_id(self, window_id: int) -> Trade | None:
+        """
+        Get non-terminal trade for a window.
+        
+        Returns the trade if it exists and is NOT in a terminal state
+        (SETTLED, CANCELLED, ERROR). Returns None if no such trade exists.
+        
+        This is used to prevent duplicate trades per window and to find
+        active trades for continuous signal scanning.
+        
+        Args:
+            window_id: Window ID to search for
+            
+        Returns:
+            Non-terminal Trade or None
+        """
+        row = self._db.fetchone(
+            """
+            SELECT * FROM trades 
+            WHERE window_id = ? AND status NOT IN (?, ?, ?)
+            """,
+            (window_id, TradeStatus.SETTLED.value, TradeStatus.CANCELLED.value, TradeStatus.ERROR.value)
+        )
+        return self._row_to_model(row) if row else None
+    
     def get_active(self) -> list[Trade]:
         """Get all non-terminal trades."""
         rows = self._db.fetchall(
@@ -224,6 +249,21 @@ class TradeRepository:
             ORDER BY created_at
             """,
             (TradeStatus.SETTLED.value, TradeStatus.CANCELLED.value, TradeStatus.ERROR.value)
+        )
+        return [self._row_to_model(row) for row in rows]
+    
+    def get_searching_signal_trades(self) -> list[Trade]:
+        """
+        Get all trades in SEARCHING_SIGNAL status.
+        
+        These trades need continuous signal scanning each tick.
+        
+        Returns:
+            List of trades in SEARCHING_SIGNAL status
+        """
+        rows = self._db.fetchall(
+            "SELECT * FROM trades WHERE status = ? ORDER BY created_at",
+            (TradeStatus.SEARCHING_SIGNAL.value,)
         )
         return [self._row_to_model(row) for row in rows]
     

@@ -28,8 +28,10 @@ logger = get_logger(__name__)
 
 
 # Valid state transitions
+# SEARCHING_SIGNAL is the active scanning state where bot re-evaluates each tick
 VALID_TRANSITIONS: dict[TradeStatus, set[TradeStatus]] = {
-    TradeStatus.NEW: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
+    TradeStatus.NEW: {TradeStatus.SEARCHING_SIGNAL, TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
+    TradeStatus.SEARCHING_SIGNAL: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
     TradeStatus.SIGNALLED: {TradeStatus.WAITING_CONFIRM, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CONFIRM: {TradeStatus.WAITING_CAP, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CAP: {TradeStatus.READY, TradeStatus.CANCELLED},
@@ -112,11 +114,23 @@ class TradeStateMachine:
         
         return trade
     
+    def on_start_signal_search(self, trade: Trade) -> Trade:
+        """
+        Start signal search for an active window.
+        
+        Transition: NEW -> SEARCHING_SIGNAL
+        
+        Trade remains in SEARCHING_SIGNAL until:
+        - A signal with quality >= threshold is found -> SIGNALLED
+        - Window expires without qualifying signal -> CANCELLED (NO_SIGNAL/EXPIRED)
+        """
+        return self.transition(trade, TradeStatus.SEARCHING_SIGNAL, "Starting signal search")
+    
     def on_signal(self, trade: Trade, signal: Signal) -> Trade:
         """
         Handle signal detection.
         
-        Transition: NEW -> SIGNALLED
+        Transition: NEW -> SIGNALLED or SEARCHING_SIGNAL -> SIGNALLED
         """
         trade.signal_id = signal.id
         return self.transition(trade, TradeStatus.SIGNALLED, "Signal detected")
@@ -125,7 +139,7 @@ class TradeStateMachine:
         """
         Handle no signal case.
         
-        Transition: NEW -> CANCELLED (NO_SIGNAL)
+        Transition: NEW -> CANCELLED or SEARCHING_SIGNAL -> CANCELLED (NO_SIGNAL)
         """
         trade.cancel_reason = CancelReason.NO_SIGNAL
         trade.decision = Decision.AUTO_SKIP

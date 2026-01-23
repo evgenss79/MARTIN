@@ -354,6 +354,53 @@ MARTIN/
 
 ---
 
+## Dual-Loop Architecture
+
+MARTIN implements a dual-loop architecture for continuous operation:
+
+### PRIMARY LOOP: Continuous TA Snapshot (Independent of Windows)
+
+The TA Snapshot Worker (`src/jobs/ta_snapshot_worker.py`) runs independently:
+
+```python
+# Runs every 30 seconds regardless of Polymarket windows
+while self._running:
+    for asset in self._assets:
+        candles_1m, candles_5m = await self._fetch_candles(asset)
+        self._cache.update(asset, candles_1m, candles_5m)
+    await asyncio.sleep(30)
+```
+
+**Purpose**: Maintain fresh TA context even when no windows exist.
+
+### PARALLEL LOOP: Window Discovery + Signal Scanning
+
+The main Orchestrator loop:
+
+```python
+# Runs every 60 seconds
+while self._running:
+    await self._tick()
+    await asyncio.sleep(60)
+```
+
+The `_tick()` method handles:
+1. Market discovery via Gamma API
+2. **SEARCHING_SIGNAL trade scanning** (in-window signal detection)
+3. Active trade processing (other states)
+4. Settlement checks
+
+### Signal Decision = Overlay (TA Context + Anchor + Window)
+
+For each SEARCHING_SIGNAL trade each tick:
+1. Get latest candles from snapshot cache (or fetch fresh)
+2. Run TA signal detection (BLACK BOX - no modifications)
+3. If no signal → remain SEARCHING_SIGNAL
+4. If signal found but quality < threshold → remain SEARCHING_SIGNAL
+5. If signal found with quality >= threshold → persist Signal, transition to SIGNALLED
+
+---
+
 ## Scheduling Mechanism
 
 MARTIN uses a simple internal async loop for scheduling, managed by the Orchestrator:
@@ -367,6 +414,7 @@ while self._running:
 
 The `_tick()` method handles:
 - Market discovery via Gamma API
+- SEARCHING_SIGNAL trade scanning
 - Active trade processing
 - Settlement checks
 
@@ -377,17 +425,21 @@ This approach is simpler than external schedulers (like APScheduler) and is suff
 ## Data Flow Pipeline
 
 ```
-1. [Scheduler] Triggers window discovery
+1. [TA Snapshot Worker] Continuously updates candle cache (every 30s)
+       ↓ (independent)
+2. [Scheduler] Triggers window discovery (every 60s)
        ↓
-2. [Gamma Client] Fetches active Polymarket markets
+3. [Gamma Client] Fetches active Polymarket markets
        ↓
-3. [Orchestrator] Creates MarketWindow records
+4. [Orchestrator] Creates MarketWindow records + SEARCHING_SIGNAL trades
        ↓
-4. [Binance Client] Fetches 1m and 5m candles
+5. [Signal Scanner] Re-evaluates SEARCHING_SIGNAL trades each tick:
+   5a. [TA Snapshot Cache] Provides candle data
+   5b. [TA Engine] Detects signal (BLACK BOX)
+   5c. If quality < threshold → remain SEARCHING_SIGNAL
+   5d. If quality >= threshold → persist Signal → SIGNALLED
        ↓
-5. [TA Engine] Detects signal and calculates quality
-       ↓
-6. [Decision Engine] Checks quality threshold
+6. [Decision Engine] Checks quality threshold (with strictness increment)
        ↓
 7. [Time Mode] Determines DAY/NIGHT behavior
        ↓

@@ -9,8 +9,9 @@
 
 | Status | Description |
 |--------|-------------|
-| `NEW` | Trade record created for a market window. No signal yet. |
-| `SIGNALLED` | TA engine detected a valid signal. |
+| `NEW` | Trade record created for a market window. Initial state before signal search begins. |
+| `SEARCHING_SIGNAL` | Trade is actively scanning for a qualifying signal within the window. TA re-evaluated each tick. |
+| `SIGNALLED` | TA engine detected a valid signal with quality >= threshold. |
 | `WAITING_CONFIRM` | Quality passed threshold. Waiting for `confirm_ts`. |
 | `WAITING_CAP` | `confirm_ts` reached. Waiting for CAP_PASS. |
 | `READY` | CAP_PASS achieved. Ready for user confirmation (Day) or execution (Night). |
@@ -25,10 +26,15 @@
 
 | Current State | Event | Next State | Notes |
 |---------------|-------|------------|-------|
-| `NEW` | Signal detected | `SIGNALLED` | Signal and quality calculated |
+| `NEW` | Start signal search | `SEARCHING_SIGNAL` | Begin scanning for signals |
+| `NEW` | Signal detected (legacy) | `SIGNALLED` | Backward compatibility |
 | `NEW` | No signal found | `CANCELLED` | Reason: NO_SIGNAL |
 | `NEW` | Window expired | `CANCELLED` | Reason: EXPIRED |
 | `NEW` | Bot paused | `CANCELLED` | Reason: PAUSED |
+| `SEARCHING_SIGNAL` | Signal with quality >= threshold | `SIGNALLED` | Qualifying signal found |
+| `SEARCHING_SIGNAL` | Signal with quality < threshold | (stay) | Remain, better signal may appear |
+| `SEARCHING_SIGNAL` | No signal detected | (stay) | Re-evaluate next tick |
+| `SEARCHING_SIGNAL` | Window expired | `CANCELLED` | Reason: NO_SIGNAL or EXPIRED |
 | `SIGNALLED` | Quality >= threshold | `WAITING_CONFIRM` | Wait for confirm_ts |
 | `SIGNALLED` | Quality < threshold | `CANCELLED` | Reason: LOW_QUALITY |
 | `SIGNALLED` | confirm_ts >= end_ts | `CANCELLED` | Reason: LATE |
@@ -42,6 +48,7 @@
 | `WAITING_CAP` | Window expired | `CANCELLED` | Reason: EXPIRED |
 | `READY` | User OK (Day mode) | `ORDER_PLACED` | Order submitted |
 | `READY` | User SKIP (Day mode) | `CANCELLED` | Reason: SKIP |
+| `READY` | No response timeout (Day) | `CANCELLED` | Reason: EXPIRED (auto-skip) |
 | `READY` | AUTO_OK (Night mode) | `ORDER_PLACED` | Order submitted |
 | `READY` | Night disabled | `CANCELLED` | Reason: NIGHT_DISABLED |
 | `READY` | Window expired | `CANCELLED` | Reason: EXPIRED |
@@ -50,6 +57,24 @@
 | `SETTLED` | — | — | Terminal state |
 | `CANCELLED` | — | — | Terminal state |
 | `ERROR` | — | — | Terminal state |
+
+---
+
+## SEARCHING_SIGNAL Behavior (In-Window Signal Scanning)
+
+The `SEARCHING_SIGNAL` status implements continuous signal scanning within an active window:
+
+1. **Entry**: Trade created when window is discovered → transitions to `SEARCHING_SIGNAL`
+2. **Each Tick**:
+   - Check if window expired → `CANCELLED` (NO_SIGNAL)
+   - Fetch latest candle data from TA snapshot cache
+   - Run TA signal detection (BLACK BOX - unchanged)
+   - If no signal → remain in `SEARCHING_SIGNAL`, try again next tick
+   - If signal found but quality < threshold → remain in `SEARCHING_SIGNAL` (better may appear)
+   - If signal found with quality >= threshold → persist Signal, transition to `SIGNALLED`
+3. **Exit**: Either `SIGNALLED` (success) or `CANCELLED` (no qualifying signal before window end)
+
+This fixes Defect A: signals appearing later inside the window are now detected.
 
 ---
 

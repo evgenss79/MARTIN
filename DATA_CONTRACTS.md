@@ -88,12 +88,17 @@
 | `updated_at` | TIMESTAMP | Yes | Last update time |
 
 **Invariants**:
-- `status` is one of: NEW, SIGNALLED, WAITING_CONFIRM, WAITING_CAP, READY, ORDER_PLACED, SETTLED, CANCELLED, ERROR
+- `status` is one of: NEW, SEARCHING_SIGNAL, SIGNALLED, WAITING_CONFIRM, WAITING_CAP, READY, ORDER_PLACED, SETTLED, CANCELLED, ERROR
 - `decision` is one of: PENDING, OK, AUTO_OK, SKIP, AUTO_SKIP
 - `fill_status` is one of: PENDING, FILLED, PARTIAL, REJECTED, CANCELLED
 - `stake_amount >= 0`
 - `is_win` is NULL until settled
 - If `status = SETTLED`, then `is_win` and `pnl` are NOT NULL
+
+**SEARCHING_SIGNAL Status**:
+- Trade is actively scanning for a qualifying signal within the window
+- TA is re-evaluated each tick until signal with quality >= threshold is found
+- If window expires without qualifying signal, status becomes CANCELLED
 
 **Relationships**:
 - Many-to-one with `market_windows` (FK: window_id)
