@@ -215,6 +215,30 @@ class TradeRepository:
         row = self._db.fetchone("SELECT * FROM trades WHERE window_id = ?", (window_id,))
         return self._row_to_model(row) if row else None
     
+    def get_non_terminal_by_window_id(self, window_id: int) -> Trade | None:
+        """
+        Get non-terminal trade for a window.
+        
+        Returns the first non-terminal trade for the given window_id.
+        Used to prevent creating duplicate trades for the same window.
+        
+        Args:
+            window_id: The market window ID
+            
+        Returns:
+            Trade if a non-terminal trade exists, None otherwise
+        """
+        row = self._db.fetchone(
+            """
+            SELECT * FROM trades 
+            WHERE window_id = ? AND status NOT IN (?, ?, ?)
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (window_id, TradeStatus.SETTLED.value, TradeStatus.CANCELLED.value, TradeStatus.ERROR.value)
+        )
+        return self._row_to_model(row) if row else None
+    
     def get_active(self) -> list[Trade]:
         """Get all non-terminal trades."""
         rows = self._db.fetchall(

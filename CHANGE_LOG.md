@@ -15,6 +15,106 @@ Each entry includes:
 
 ---
 
+## 2026-01-23: Add SEARCHING_SIGNAL State and Continuous In-Window Signal Scanning
+
+**Change**: Implemented dual-loop architecture with SEARCHING_SIGNAL status for continuous TA evaluation within market windows.
+
+**Details**:
+
+### A) Added SEARCHING_SIGNAL TradeStatus
+- New status in `src/domain/enums.py`: `SEARCHING_SIGNAL`
+- State machine transitions in `src/services/state_machine.py`:
+  - `NEW -> SEARCHING_SIGNAL` (on window discovery)
+  - `SEARCHING_SIGNAL -> SIGNALLED` (when qualifying signal found with quality >= threshold)
+  - `SEARCHING_SIGNAL -> CANCELLED` (window expired without qualifying signal)
+- New state machine handlers:
+  - `on_start_searching()`: Transition NEW -> SEARCHING_SIGNAL
+  - `on_qualifying_signal_found()`: Transition SEARCHING_SIGNAL -> SIGNALLED
+  - `on_no_qualifying_signal()`: Transition SEARCHING_SIGNAL -> CANCELLED (NO_SIGNAL)
+  - `on_user_no_response_skip()`: Transition READY -> CANCELLED (day mode auto-skip)
+
+### B) Create/Revive Trade for Existing Active Window
+- Added `get_non_terminal_by_window_id()` helper to TradeRepository
+- Modified discovery to check for existing non-terminal trades before creating new ones
+- Idempotent: only one non-terminal trade per window_id
+- Trades created for active windows that have no existing trade
+
+### C) Continuous In-Window Signal Scanning
+- SEARCHING_SIGNAL trades processed each tick with fresh TA evaluation
+- Trade remains in SEARCHING_SIGNAL if:
+  - No signal detected
+  - Signal detected but quality < threshold (better signal may appear)
+- Transitions to SIGNALLED only when quality >= threshold
+- Telegram notification sent only when qualifying signal found
+
+### D) TA Snapshot Worker (Background Job)
+- New file: `src/jobs/ta_snapshot_worker.py`
+- Periodic fetch of 1m/5m candles for configured assets
+- TASnapshotCache with TTL-based invalidation
+- Runs independently of market windows (PRIMARY LOOP)
+
+### E) Day Mode Auto-Skip for Unresponsive Signals
+- Added `max_response_seconds` config (default 600s)
+- In READY state: if user doesn't respond within timeout, trade auto-skipped
+- Logged as `DAY_NO_RESPONSE_SKIP`
+- Per MG-1: skips do NOT break streak
+
+### F) Streak Management (10-Win Series Support)
+- Verified `switch_streak_at` and `night_max_win_streak` support values >= 10
+- Configurable via Telegram settings
+
+### G) Configurable Strictness Increment
+- Added `start_strict_after_n_wins` and `strict_quality_increment` settings
+- Formula: `threshold = base + max(0, wins - start + 1) * increment`
+- Modifies only acceptance threshold, NOT TA quality computation
+
+### H) Regression Tests
+- New file: `src/tests/test_searching_signal_flow.py` (23 tests)
+- Test 1: No signal tick 1 → signal tick 2 → SIGNALLED
+- Test 2: Signal below threshold → remain SEARCHING_SIGNAL → quality passes later
+- Test 3: Window expires without qualifying signal → CANCELLED
+- Deterministic tests with stubs/mocks
+
+### I) Logging Added
+- `SEARCHING_SIGNAL_TICK`: Each evaluation for SEARCHING_SIGNAL trade
+- `DECISION_NO_SIGNAL`: No signal this tick
+- `DECISION_REJECTED_LOW_QUALITY`: Signal below threshold
+- `DECISION_ACCEPTED_SIGNALLED`: Qualifying signal found
+- `DAY_NO_RESPONSE_SKIP`: Day mode auto-skip
+- `TRADE_CREATED_FOR_EXISTING_WINDOW`: Trade created for active window
+- `TRADE_DEDUPED`: Duplicate trade prevention
+
+**Files Modified**:
+- `src/domain/enums.py`: Added SEARCHING_SIGNAL status
+- `src/services/state_machine.py`: Added transitions and handlers
+- `src/services/orchestrator.py`: Dual-loop architecture, continuous scanning
+- `src/adapters/storage/repositories.py`: Added get_non_terminal_by_window_id
+- `src/services/day_night_config.py`: Added new settings
+- `src/jobs/ta_snapshot_worker.py`: New file for TA caching
+- `src/jobs/__init__.py`: Export TASnapshotWorker
+- `src/tests/test_searching_signal_flow.py`: New regression tests
+
+**Documentation Updated**:
+- STATE_MACHINE.md: SEARCHING_SIGNAL transitions
+- ARCHITECTURE.md: Dual-loop architecture
+- DATA_CONTRACTS.md: Updated status enum
+- CHANGE_LOG.md: This entry
+
+**Reason**: Fix defects A (TA evaluated only once), B (continuous TA missing), C (day mode silent skip), per owner requirements.
+
+**Behavior Changed**: Yes
+- Trades now created in SEARCHING_SIGNAL state instead of immediate signal evaluation
+- Continuous TA re-evaluation each tick for SEARCHING_SIGNAL trades
+- Signal persisted and Telegram sent only when quality >= threshold
+- Day mode auto-skips unresponsive signals after timeout
+
+**TA Logic Preserved**: ZERO changes to:
+- Signal detection logic (EMA20 1m with touch + 2-bar confirm)
+- Quality formula (W_ANCHOR=1.0, W_ADX=0.2, W_SLOPE=0.2)
+- Indicator calculations
+
+---
+
 ## 2026-01-22: Add Comprehensive INFO-Level Orchestration Logging
 
 **Change**: Added comprehensive INFO-level logging throughout the orchestrator to enable full runtime decision traceability.

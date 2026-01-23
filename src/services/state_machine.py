@@ -29,7 +29,8 @@ logger = get_logger(__name__)
 
 # Valid state transitions
 VALID_TRANSITIONS: dict[TradeStatus, set[TradeStatus]] = {
-    TradeStatus.NEW: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
+    TradeStatus.NEW: {TradeStatus.SIGNALLED, TradeStatus.SEARCHING_SIGNAL, TradeStatus.CANCELLED},
+    TradeStatus.SEARCHING_SIGNAL: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},  # Continuous scanning until signal or expiry
     TradeStatus.SIGNALLED: {TradeStatus.WAITING_CONFIRM, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CONFIRM: {TradeStatus.WAITING_CAP, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CAP: {TradeStatus.READY, TradeStatus.CANCELLED},
@@ -331,3 +332,49 @@ class TradeStateMachine:
         trade.cancel_reason = CancelReason.NIGHT_DISABLED
         trade.decision = Decision.AUTO_SKIP
         return self.transition(trade, TradeStatus.CANCELLED, "Night trading disabled")
+    
+    def on_start_searching(self, trade: Trade) -> Trade:
+        """
+        Start searching for signal in window.
+        
+        Transition: NEW -> SEARCHING_SIGNAL
+        
+        Used when creating a trade for a discovered window,
+        entering the continuous in-window signal scanning mode.
+        """
+        return self.transition(trade, TradeStatus.SEARCHING_SIGNAL, "Started signal search")
+    
+    def on_qualifying_signal_found(self, trade: Trade, signal: Signal) -> Trade:
+        """
+        Handle qualifying signal found during SEARCHING_SIGNAL.
+        
+        Transition: SEARCHING_SIGNAL -> SIGNALLED
+        
+        Called when a signal is detected AND quality >= threshold.
+        """
+        trade.signal_id = signal.id
+        return self.transition(trade, TradeStatus.SIGNALLED, "Qualifying signal found")
+    
+    def on_no_qualifying_signal(self, trade: Trade) -> Trade:
+        """
+        Handle window expiry without qualifying signal.
+        
+        Transition: SEARCHING_SIGNAL -> CANCELLED (NO_SIGNAL)
+        
+        Called when window ends without any signal passing quality threshold.
+        """
+        trade.cancel_reason = CancelReason.NO_SIGNAL
+        trade.decision = Decision.AUTO_SKIP
+        return self.transition(trade, TradeStatus.CANCELLED, "No qualifying signal found in window")
+    
+    def on_user_no_response_skip(self, trade: Trade) -> Trade:
+        """
+        Handle user not responding to signal in day mode.
+        
+        Transition: READY -> CANCELLED (SKIP)
+        
+        Called when max_response_seconds elapses without user OK/SKIP.
+        """
+        trade.decision = Decision.AUTO_SKIP
+        trade.cancel_reason = CancelReason.SKIP
+        return self.transition(trade, TradeStatus.CANCELLED, "User did not respond in time")
