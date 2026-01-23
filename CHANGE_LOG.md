@@ -112,6 +112,35 @@ Added logging at every stage of the trading pipeline as required by the MARTIN s
 
 ---
 
+## 2026-01-23: Add SEARCHING_SIGNAL and idempotent trade creation for existing windows (Stage 1)
+
+**Change**: Added SEARCHING_SIGNAL state and ensured existing active windows create idempotent trades.
+
+**Details**:
+
+### Trade Status and State Machine
+- Introduced `SEARCHING_SIGNAL` status between NEW and SIGNALLED
+- Added NEW → SEARCHING_SIGNAL transition and SEARCHING_SIGNAL → SIGNALLED/CANCELLED paths
+
+### Orchestrator Discovery Behavior
+- Existing active windows now create a trade if no non-terminal trade exists
+- Added repository helper to ensure one non-terminal trade per window
+- Added INFO logs: `TRADE_CREATED_FOR_EXISTING_WINDOW`, `TRADE_DEDUPED_EXISTING_WINDOW`
+
+**Reason**: Enable signal scanning lifecycle and avoid missing trades when windows already exist in storage.
+
+**Behavior Changed**: Yes (trade creation now idempotent for existing active windows)
+
+**Files Modified**:
+- `src/domain/enums.py`: Added SEARCHING_SIGNAL
+- `src/services/state_machine.py`: Added SEARCHING_SIGNAL transitions
+- `src/services/orchestrator.py`: Idempotent trade creation for existing windows
+- `src/adapters/storage/repositories.py`: Added non-terminal trade lookup helper
+- `src/tests/test_state_machine.py`: Added SEARCHING_SIGNAL transition coverage
+- `STATE_MACHINE.md`, `DATA_CONTRACTS.md`, `CHANGE_LOG.md`: Documentation updates
+
+---
+
 ## 2026-01-22: Remove TA Data Sufficiency Guards
 
 **Change**: Removed the data sufficiency guards (120/60/idx5>=55) from TA Engine.

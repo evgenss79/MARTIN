@@ -58,12 +58,19 @@ class TestStateTransitions:
     
     def test_new_to_signalled(self, state_machine, new_trade):
         """NEW -> SIGNALLED on signal detection."""
+        state_machine.on_searching_signal(new_trade)
         signal = Signal(id=1, window_id=1, direction=Direction.UP)
         
         result = state_machine.on_signal(new_trade, signal)
         
         assert result.status == TradeStatus.SIGNALLED
         assert result.signal_id == 1
+
+    def test_new_to_searching_signal(self, state_machine, new_trade):
+        """NEW -> SEARCHING_SIGNAL on start."""
+        result = state_machine.on_searching_signal(new_trade)
+
+        assert result.status == TradeStatus.SEARCHING_SIGNAL
     
     def test_new_to_cancelled_no_signal(self, state_machine, new_trade):
         """NEW -> CANCELLED on no signal."""

@@ -214,6 +214,20 @@ class TradeRepository:
         """Get trade for a window."""
         row = self._db.fetchone("SELECT * FROM trades WHERE window_id = ?", (window_id,))
         return self._row_to_model(row) if row else None
+
+    def get_non_terminal_by_window_id(self, window_id: int) -> Trade | None:
+        """Get non-terminal trade for a window (if any)."""
+        row = self._db.fetchone(
+            """
+            SELECT * FROM trades
+            WHERE window_id = ?
+              AND status NOT IN (?, ?, ?)
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (window_id, TradeStatus.SETTLED.value, TradeStatus.CANCELLED.value, TradeStatus.ERROR.value),
+        )
+        return self._row_to_model(row) if row else None
     
     def get_active(self) -> list[Trade]:
         """Get all non-terminal trades."""
