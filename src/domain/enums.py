@@ -30,10 +30,15 @@ class TradeStatus(str, Enum):
     Trade status in state machine.
     
     State transitions:
-    NEW -> SIGNALLED -> WAITING_CONFIRM -> WAITING_CAP -> READY -> ORDER_PLACED -> SETTLED
+    NEW -> SEARCHING_SIGNAL -> SIGNALLED -> WAITING_CONFIRM -> WAITING_CAP -> READY -> ORDER_PLACED -> SETTLED
     CANCELLED/ERROR are terminal states.
+    
+    SEARCHING_SIGNAL: Trade is actively scanning for a qualifying signal within the window.
+    The bot re-evaluates TA each tick. If a signal with quality >= threshold is found,
+    transition to SIGNALLED. If window expires without qualifying signal, transition to CANCELLED.
     """
     NEW = "NEW"
+    SEARCHING_SIGNAL = "SEARCHING_SIGNAL"
     SIGNALLED = "SIGNALLED"
     WAITING_CONFIRM = "WAITING_CONFIRM"
     WAITING_CAP = "WAITING_CAP"
