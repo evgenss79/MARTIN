@@ -29,7 +29,8 @@ logger = get_logger(__name__)
 
 # Valid state transitions
 VALID_TRANSITIONS: dict[TradeStatus, set[TradeStatus]] = {
-    TradeStatus.NEW: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
+    TradeStatus.NEW: {TradeStatus.SEARCHING_SIGNAL, TradeStatus.CANCELLED},
+    TradeStatus.SEARCHING_SIGNAL: {TradeStatus.SIGNALLED, TradeStatus.CANCELLED},
     TradeStatus.SIGNALLED: {TradeStatus.WAITING_CONFIRM, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CONFIRM: {TradeStatus.WAITING_CAP, TradeStatus.CANCELLED},
     TradeStatus.WAITING_CAP: {TradeStatus.READY, TradeStatus.CANCELLED},
@@ -116,10 +117,18 @@ class TradeStateMachine:
         """
         Handle signal detection.
         
-        Transition: NEW -> SIGNALLED
+        Transition: SEARCHING_SIGNAL -> SIGNALLED (when signal persisted)
         """
         trade.signal_id = signal.id
         return self.transition(trade, TradeStatus.SIGNALLED, "Signal detected")
+
+    def on_searching_signal(self, trade: Trade) -> Trade:
+        """
+        Handle searching signal state.
+        
+        Transition: NEW -> SEARCHING_SIGNAL
+        """
+        return self.transition(trade, TradeStatus.SEARCHING_SIGNAL, "Searching for signal")
     
     def on_no_signal(self, trade: Trade) -> Trade:
         """

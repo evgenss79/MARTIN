@@ -353,11 +353,34 @@ class Orchestrator:
                 # Check if already exists
                 existing = self._window_repo.get_by_slug(window.slug)
                 if existing:
+                    if existing.end_ts <= current_ts:
+                        logger.info(
+                            "WINDOW_SKIP: Window already exists (expired)",
+                            cycle_id=cycle_id,
+                            slug=window.slug,
+                            window_id=existing.id,
+                        )
+                        continue
+
+                    existing_trade = self._trade_repo.get_non_terminal_by_window_id(existing.id)
+                    if existing_trade:
+                        logger.info(
+                            "TRADE_DEDUPED_EXISTING_WINDOW: Non-terminal trade already exists",
+                            cycle_id=cycle_id,
+                            slug=existing.slug,
+                            window_id=existing.id,
+                            trade_id=existing_trade.id,
+                            status=existing_trade.status.value,
+                        )
+                        continue
+
                     logger.info(
-                        "WINDOW_SKIP: Window already exists",
+                        "TRADE_CREATED_FOR_EXISTING_WINDOW: Creating trade for existing window",
                         cycle_id=cycle_id,
-                        slug=window.slug,
+                        slug=existing.slug,
+                        window_id=existing.id,
                     )
+                    await self._create_trade_for_window(existing, current_ts, cycle_id, is_existing_window=True)
                     continue
                 
                 # Save new window
@@ -385,6 +408,7 @@ class Orchestrator:
         window: MarketWindow,
         current_ts: int,
         cycle_id: int = 0,
+        is_existing_window: bool = False,
     ) -> Trade | None:
         """Create and process a trade for a market window."""
         stats = self._stats_service.get_stats()
@@ -419,12 +443,15 @@ class Orchestrator:
             night_streak=stats.night_streak,
         )
         trade = self._trade_repo.create(trade)
+        if trade.status == TradeStatus.NEW:
+            self._state_machine.on_searching_signal(trade)
         
         logger.info(
             "TRADE_CREATED: Trade record created",
             cycle_id=cycle_id,
             window_id=window.id,
             trade_id=trade.id,
+            existing_window=is_existing_window,
         )
         
         # Fetch candles concurrently for better performance
@@ -460,7 +487,10 @@ class Orchestrator:
                 window_id=window.id,
                 error=str(e),
             )
-            self._state_machine.on_no_signal(trade)
+            if window.is_expired(current_ts):
+                self._state_machine.on_expired(trade)
+            else:
+                self._state_machine.on_no_signal(trade)
             return None
         
         logger.info(
@@ -489,13 +519,16 @@ class Orchestrator:
         
         if signal_result is None:
             logger.info(
-                "DECISION_REJECTED: No signal detected",
+                "DECISION_NO_SIGNAL: No signal detected",
                 cycle_id=cycle_id,
                 window_id=window.id,
                 trade_id=trade.id,
                 reason="NO_SIGNAL",
             )
-            self._state_machine.on_no_signal(trade)
+            if window.is_expired(current_ts):
+                self._state_machine.on_expired(trade)
+            else:
+                self._state_machine.on_no_signal(trade)
             return None
         
         logger.info(

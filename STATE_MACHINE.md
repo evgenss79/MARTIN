@@ -10,6 +10,7 @@
 | Status | Description |
 |--------|-------------|
 | `NEW` | Trade record created for a market window. No signal yet. |
+| `SEARCHING_SIGNAL` | Trade is scanning window for a qualifying signal. |
 | `SIGNALLED` | TA engine detected a valid signal. |
 | `WAITING_CONFIRM` | Quality passed threshold. Waiting for `confirm_ts`. |
 | `WAITING_CAP` | `confirm_ts` reached. Waiting for CAP_PASS. |
@@ -25,10 +26,11 @@
 
 | Current State | Event | Next State | Notes |
 |---------------|-------|------------|-------|
-| `NEW` | Signal detected | `SIGNALLED` | Signal and quality calculated |
-| `NEW` | No signal found | `CANCELLED` | Reason: NO_SIGNAL |
-| `NEW` | Window expired | `CANCELLED` | Reason: EXPIRED |
-| `NEW` | Bot paused | `CANCELLED` | Reason: PAUSED |
+| `NEW` | Start scanning | `SEARCHING_SIGNAL` | Begin signal scan |
+| `SEARCHING_SIGNAL` | Signal detected | `SIGNALLED` | Signal and quality calculated |
+| `SEARCHING_SIGNAL` | No signal found | `CANCELLED` | Reason: NO_SIGNAL |
+| `SEARCHING_SIGNAL` | Window expired | `CANCELLED` | Reason: EXPIRED |
+| `SEARCHING_SIGNAL` | Bot paused | `CANCELLED` | Reason: PAUSED |
 | `SIGNALLED` | Quality >= threshold | `WAITING_CONFIRM` | Wait for confirm_ts |
 | `SIGNALLED` | Quality < threshold | `CANCELLED` | Reason: LOW_QUALITY |
 | `SIGNALLED` | confirm_ts >= end_ts | `CANCELLED` | Reason: LATE |
