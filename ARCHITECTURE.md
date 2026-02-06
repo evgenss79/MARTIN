@@ -367,10 +367,36 @@ while self._running:
 
 The `_tick()` method handles:
 - Market discovery via Gamma API
-- Active trade processing
+- Active trade processing (including SEARCHING_SIGNAL trades)
 - Settlement checks
 
 This approach is simpler than external schedulers (like APScheduler) and is sufficient for MARTIN's needs since all tasks run on a fixed 60-second interval aligned with the hourly market windows.
+
+---
+
+## Dual-Loop Architecture
+
+MARTIN implements a dual-loop architecture for signal detection:
+
+### PRIMARY LOOP: Continuous TA Context (Independent of Markets)
+- TASnapshotWorker runs every 30 seconds (configurable)
+- Fetches 1m and 5m candles from Binance for all configured assets
+- Maintains a TA snapshot cache per asset with freshness tracking
+- Runs even when no Polymarket window exists
+- Located in: `src/jobs/ta_snapshot_worker.py`
+
+### PARALLEL LOOP: Polymarket Window Discovery + In-Window Scanning
+- Orchestrator discovers hourly "up/down" markets via Gamma API
+- Creates SEARCHING_SIGNAL trades for discovered windows
+- Continuously re-evaluates TA for SEARCHING_SIGNAL trades each tick
+- Transitions to SIGNALLED only when quality >= threshold
+
+### Signal Decision Flow
+1. Window discovered → Trade created in SEARCHING_SIGNAL state
+2. Each tick: TA evaluated for SEARCHING_SIGNAL trades
+3. If signal detected AND quality >= threshold → SIGNALLED, send Telegram
+4. If signal detected BUT quality < threshold → remain SEARCHING_SIGNAL (better signal may come)
+5. If window expires without qualifying signal → CANCELLED (NO_SIGNAL)
 
 ---
 
@@ -381,17 +407,17 @@ This approach is simpler than external schedulers (like APScheduler) and is suff
        ↓
 2. [Gamma Client] Fetches active Polymarket markets
        ↓
-3. [Orchestrator] Creates MarketWindow records
+3. [Orchestrator] Creates MarketWindow and SEARCHING_SIGNAL trade
        ↓
-4. [Binance Client] Fetches 1m and 5m candles
+4. [Binance Client] Fetches 1m and 5m candles (each tick)
        ↓
 5. [TA Engine] Detects signal and calculates quality
        ↓
-6. [Decision Engine] Checks quality threshold
+6. [Quality Check] If quality < threshold → remain SEARCHING_SIGNAL
        ↓
-7. [Time Mode] Determines DAY/NIGHT behavior
+7. [Decision Engine] If quality >= threshold → SIGNALLED
        ↓
-8. [Telegram Bot] Sends trade card (Day) or auto-proceeds (Night)
+8. [Telegram Bot] Sends trade card (only on qualifying signal)
        ↓
 9. [State Machine] Transitions: SIGNALLED → WAITING_CONFIRM
        ↓

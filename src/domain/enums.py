@@ -30,10 +30,14 @@ class TradeStatus(str, Enum):
     Trade status in state machine.
     
     State transitions:
-    NEW -> SIGNALLED -> WAITING_CONFIRM -> WAITING_CAP -> READY -> ORDER_PLACED -> SETTLED
+    NEW -> SEARCHING_SIGNAL (continuous in-window scanning)
+    SEARCHING_SIGNAL -> SIGNALLED (qualifying signal found with quality >= threshold)
+    SEARCHING_SIGNAL -> CANCELLED (window expired without qualifying signal)
+    SIGNALLED -> WAITING_CONFIRM -> WAITING_CAP -> READY -> ORDER_PLACED -> SETTLED
     CANCELLED/ERROR are terminal states.
     """
     NEW = "NEW"
+    SEARCHING_SIGNAL = "SEARCHING_SIGNAL"  # Actively scanning for qualifying signal
     SIGNALLED = "SIGNALLED"
     WAITING_CONFIRM = "WAITING_CONFIRM"
     WAITING_CAP = "WAITING_CAP"

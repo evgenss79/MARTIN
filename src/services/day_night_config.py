@@ -25,6 +25,11 @@ SETTING_NIGHT_MAX_STREAK = "day_night.night_max_win_streak"
 SETTING_SWITCH_STREAK_AT = "day_night.switch_streak_at"
 SETTING_REMINDER_MINUTES = "day_night.reminder_minutes_before_day_end"
 SETTING_NIGHT_SESSION_MODE = "day_night.night_session_mode"
+SETTING_MAX_RESPONSE_SECONDS = "day_night.max_response_seconds"  # E: Day mode auto-skip timeout
+
+# Strictness increment settings (G)
+SETTING_START_STRICT_AFTER_N_WINS = "day_night.start_strict_after_n_wins"
+SETTING_STRICT_QUALITY_INCREMENT = "day_night.strict_quality_increment"
 
 # Trading settings keys for persistence
 SETTING_PRICE_CAP = "trading.price_cap"
@@ -72,6 +77,9 @@ class DayNightConfigService:
         default_confirm_delay: int = 120,
         default_cap_min_ticks: int = 3,
         default_base_stake: float = 10.0,
+        default_max_response_seconds: int = 600,  # E: Day mode auto-skip timeout
+        default_start_strict_after_n_wins: int = 5,  # G: Strictness increment
+        default_strict_quality_increment: float = 2.0,  # G: Strictness increment
     ):
         """
         Initialize Day/Night Configuration Service.
@@ -91,6 +99,9 @@ class DayNightConfigService:
             default_confirm_delay: Default confirm delay in seconds
             default_cap_min_ticks: Default minimum consecutive ticks for CAP_PASS
             default_base_stake: Default base stake amount in USDC
+            default_max_response_seconds: Max seconds to wait for user response in day mode (0=disabled)
+            default_start_strict_after_n_wins: Wins before strictness increment starts
+            default_strict_quality_increment: Quality increment per win after start threshold
         """
         self._settings_repo = settings_repo
         self._tz = ZoneInfo(self.TIMEZONE)
@@ -110,6 +121,9 @@ class DayNightConfigService:
             SETTING_CONFIRM_DELAY: default_confirm_delay,
             SETTING_CAP_MIN_TICKS: default_cap_min_ticks,
             SETTING_BASE_STAKE: default_base_stake,
+            SETTING_MAX_RESPONSE_SECONDS: default_max_response_seconds,
+            SETTING_START_STRICT_AFTER_N_WINS: default_start_strict_after_n_wins,
+            SETTING_STRICT_QUALITY_INCREMENT: default_strict_quality_increment,
         }
     
     def _get_setting(self, key: str) -> str | None:
@@ -662,3 +676,140 @@ class DayNightConfigService:
         self._set_setting(SETTING_BASE_STAKE, str(amount))
         logger.info("Updated base stake", amount=amount)
         return True
+    
+    # ============================================
+    # Day Mode Auto-Skip Settings (E)
+    # ============================================
+    
+    def get_max_response_seconds(self) -> int:
+        """
+        Get maximum response time for day mode user confirmation.
+        
+        If user does not respond within this time, trade is auto-skipped.
+        Returns 0 to disable auto-skip.
+        
+        Returns:
+            Seconds (0 = disabled, default 600)
+        """
+        stored = self._get_setting(SETTING_MAX_RESPONSE_SECONDS)
+        if stored is not None:
+            return int(stored)
+        return self._defaults.get(SETTING_MAX_RESPONSE_SECONDS, 600)
+    
+    def set_max_response_seconds(self, seconds: int) -> bool:
+        """
+        Set maximum response time for day mode user confirmation.
+        
+        Args:
+            seconds: Max response time (0 = disabled, >= 0)
+            
+        Returns:
+            True if successfully set
+        """
+        if seconds < 0:
+            logger.error("Invalid max response seconds", seconds=seconds)
+            return False
+        
+        self._set_setting(SETTING_MAX_RESPONSE_SECONDS, str(seconds))
+        logger.info("Updated max response seconds", seconds=seconds)
+        return True
+    
+    # ============================================
+    # Strictness Increment Settings (G)
+    # ============================================
+    
+    def get_start_strict_after_n_wins(self) -> int:
+        """
+        Get wins required before strictness increment starts.
+        
+        Returns:
+            Number of wins (default 5)
+        """
+        stored = self._get_setting(SETTING_START_STRICT_AFTER_N_WINS)
+        if stored is not None:
+            return int(stored)
+        return self._defaults.get(SETTING_START_STRICT_AFTER_N_WINS, 5)
+    
+    def set_start_strict_after_n_wins(self, wins: int) -> bool:
+        """
+        Set wins required before strictness increment starts.
+        
+        Args:
+            wins: Number of wins (>= 1)
+            
+        Returns:
+            True if successfully set
+        """
+        if wins < 1:
+            logger.error("Invalid start strict after n wins", wins=wins)
+            return False
+        
+        self._set_setting(SETTING_START_STRICT_AFTER_N_WINS, str(wins))
+        logger.info("Updated start strict after n wins", wins=wins)
+        return True
+    
+    def get_strict_quality_increment(self) -> float:
+        """
+        Get quality increment per win after start threshold.
+        
+        Returns:
+            Increment amount (default 2.0)
+        """
+        stored = self._get_setting(SETTING_STRICT_QUALITY_INCREMENT)
+        if stored is not None:
+            return float(stored)
+        return self._defaults.get(SETTING_STRICT_QUALITY_INCREMENT, 2.0)
+    
+    def set_strict_quality_increment(self, increment: float) -> bool:
+        """
+        Set quality increment per win after start threshold.
+        
+        Args:
+            increment: Increment per win (>= 0)
+            
+        Returns:
+            True if successfully set
+        """
+        if increment < 0:
+            logger.error("Invalid strict quality increment", increment=increment)
+            return False
+        
+        self._set_setting(SETTING_STRICT_QUALITY_INCREMENT, str(increment))
+        logger.info("Updated strict quality increment", increment=increment)
+        return True
+    
+    def calculate_adjusted_threshold(
+        self,
+        base_threshold: float,
+        current_wins: int,
+    ) -> float:
+        """
+        Calculate adjusted quality threshold with strictness increment.
+        
+        Formula: base + max(0, wins - start_strict_after_n_wins + 1) * increment
+        
+        This modifies only the acceptance threshold, NOT the TA quality computation.
+        
+        Args:
+            base_threshold: Base quality threshold
+            current_wins: Current win streak
+            
+        Returns:
+            Adjusted threshold
+        """
+        start_after = self.get_start_strict_after_n_wins()
+        increment = self.get_strict_quality_increment()
+        
+        increment_multiplier = max(0, current_wins - start_after + 1)
+        adjusted = base_threshold + increment_multiplier * increment
+        
+        logger.debug(
+            "Quality threshold adjusted",
+            base_threshold=base_threshold,
+            current_wins=current_wins,
+            start_after=start_after,
+            increment=increment,
+            adjusted_threshold=adjusted,
+        )
+        
+        return adjusted

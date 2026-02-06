@@ -88,7 +88,7 @@
 | `updated_at` | TIMESTAMP | Yes | Last update time |
 
 **Invariants**:
-- `status` is one of: NEW, SIGNALLED, WAITING_CONFIRM, WAITING_CAP, READY, ORDER_PLACED, SETTLED, CANCELLED, ERROR
+- `status` is one of: NEW, SEARCHING_SIGNAL, SIGNALLED, WAITING_CONFIRM, WAITING_CAP, READY, ORDER_PLACED, SETTLED, CANCELLED, ERROR
 - `decision` is one of: PENDING, OK, AUTO_OK, SKIP, AUTO_SKIP
 - `fill_status` is one of: PENDING, FILLED, PARTIAL, REJECTED, CANCELLED
 - `stake_amount >= 0`

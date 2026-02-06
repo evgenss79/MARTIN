@@ -9,8 +9,9 @@
 
 | Status | Description |
 |--------|-------------|
-| `NEW` | Trade record created for a market window. No signal yet. |
-| `SIGNALLED` | TA engine detected a valid signal. |
+| `NEW` | Trade record created for a market window. Initial state. |
+| `SEARCHING_SIGNAL` | Actively scanning for qualifying signal within the window. Continuous TA evaluation. |
+| `SIGNALLED` | TA engine detected a valid signal meeting quality threshold. |
 | `WAITING_CONFIRM` | Quality passed threshold. Waiting for `confirm_ts`. |
 | `WAITING_CAP` | `confirm_ts` reached. Waiting for CAP_PASS. |
 | `READY` | CAP_PASS achieved. Ready for user confirmation (Day) or execution (Night). |
@@ -25,10 +26,15 @@
 
 | Current State | Event | Next State | Notes |
 |---------------|-------|------------|-------|
-| `NEW` | Signal detected | `SIGNALLED` | Signal and quality calculated |
+| `NEW` | Start signal search | `SEARCHING_SIGNAL` | Begin continuous TA scanning |
+| `NEW` | Signal detected (immediate) | `SIGNALLED` | Legacy: direct signal detection |
 | `NEW` | No signal found | `CANCELLED` | Reason: NO_SIGNAL |
 | `NEW` | Window expired | `CANCELLED` | Reason: EXPIRED |
 | `NEW` | Bot paused | `CANCELLED` | Reason: PAUSED |
+| `SEARCHING_SIGNAL` | Qualifying signal found | `SIGNALLED` | Signal meets quality threshold |
+| `SEARCHING_SIGNAL` | No qualifying signal | (remain) | Continue scanning next tick |
+| `SEARCHING_SIGNAL` | Signal below threshold | (remain) | Wait for better signal |
+| `SEARCHING_SIGNAL` | Window expired | `CANCELLED` | Reason: NO_SIGNAL |
 | `SIGNALLED` | Quality >= threshold | `WAITING_CONFIRM` | Wait for confirm_ts |
 | `SIGNALLED` | Quality < threshold | `CANCELLED` | Reason: LOW_QUALITY |
 | `SIGNALLED` | confirm_ts >= end_ts | `CANCELLED` | Reason: LATE |
@@ -42,6 +48,7 @@
 | `WAITING_CAP` | Window expired | `CANCELLED` | Reason: EXPIRED |
 | `READY` | User OK (Day mode) | `ORDER_PLACED` | Order submitted |
 | `READY` | User SKIP (Day mode) | `CANCELLED` | Reason: SKIP |
+| `READY` | User no response (Day mode) | `CANCELLED` | Reason: SKIP (auto-skip after max_response_seconds) |
 | `READY` | AUTO_OK (Night mode) | `ORDER_PLACED` | Order submitted |
 | `READY` | Night disabled | `CANCELLED` | Reason: NIGHT_DISABLED |
 | `READY` | Window expired | `CANCELLED` | Reason: EXPIRED |

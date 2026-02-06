@@ -1,19 +1,19 @@
 # QA Report - MARTIN Telegram Trading Bot
 
-**Date**: 2026-01-22  
-**Last Updated**: 2026-01-22T22:43:00Z  
-**Version**: 1.5.0 (Comprehensive Logging)  
-**Test Suite**: 308 tests passing
+**Date**: 2026-01-23  
+**Last Updated**: 2026-01-23T11:40:00Z  
+**Version**: 1.6.0 (SEARCHING_SIGNAL + Continuous In-Window Scanning)  
+**Test Suite**: 331 tests passing
 
 ---
 
 ## 1. Executive Summary
 
-All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, **SPEC-aligned signal detection and quality calculation**, and **comprehensive INFO-level orchestration logging**.
+All production-like QA verification has been completed successfully. The MARTIN trading bot is ready for deployment with comprehensive test coverage, verified Memory Gate compliance, **SPEC-aligned signal detection and quality calculation**, **comprehensive INFO-level orchestration logging**, and **SEARCHING_SIGNAL continuous in-window signal scanning**.
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | 308 |
+| Total Tests | 331 |
 | Unit Tests | 140 |
 | Smoke Tests | 10 |
 | Startup Smoke Tests | 7 |
@@ -27,7 +27,64 @@ All production-like QA verification has been completed successfully. The MARTIN 
 | Status Indicator Tests | 16 |
 | **Canonical Strategy Tests** | **28** |
 | TA Engine Tests | 19 |
+| **SEARCHING_SIGNAL Flow Tests** | **23** |
 | All Passing | ✅ |
+
+---
+
+## 0. SEARCHING_SIGNAL Flow (2026-01-23)
+
+### Changes Applied
+
+Implemented SEARCHING_SIGNAL state and continuous in-window signal scanning as per owner requirements.
+
+**Key Principle**: "If signal appears later inside the same active window, it must NOT be missed."
+
+### SEARCHING_SIGNAL State
+
+| Status | Description |
+|--------|-------------|
+| `SEARCHING_SIGNAL` | Actively scanning for qualifying signal within the window |
+
+### State Transitions
+
+| From | Event | To |
+|------|-------|----|
+| NEW | on_start_searching() | SEARCHING_SIGNAL |
+| SEARCHING_SIGNAL | on_qualifying_signal_found() | SIGNALLED |
+| SEARCHING_SIGNAL | on_no_qualifying_signal() | CANCELLED (NO_SIGNAL) |
+| SEARCHING_SIGNAL | Window expired | CANCELLED |
+
+### Continuous In-Window Scanning
+
+Each orchestrator tick:
+1. SEARCHING_SIGNAL trades fetched as active trades
+2. Fresh candle data loaded from Binance
+3. TA detection run (BLACK BOX - no changes)
+4. Quality calculated (BLACK BOX - no changes)
+5. If quality >= threshold: persist Signal, transition to SIGNALLED, send Telegram
+6. If quality < threshold: remain SEARCHING_SIGNAL (better signal may come)
+7. If window expires: transition to CANCELLED (NO_SIGNAL)
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/domain/enums.py` | Added SEARCHING_SIGNAL status |
+| `src/services/state_machine.py` | Added transitions and handlers |
+| `src/services/orchestrator.py` | Continuous in-window scanning |
+| `src/adapters/storage/repositories.py` | get_non_terminal_by_window_id |
+| `src/services/day_night_config.py` | max_response_seconds, strictness settings |
+| `src/jobs/ta_snapshot_worker.py` | NEW: TA snapshot cache |
+| `src/tests/test_searching_signal_flow.py` | NEW: 23 regression tests |
+| Documentation files | Updated |
+
+### Verification Command
+
+```bash
+python -m pytest src/tests/test_searching_signal_flow.py -v
+# Expected: 23 passed
+```
 
 ---
 
